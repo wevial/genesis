@@ -20,6 +20,13 @@
     - Nebula fade-out:   nebAmt   (gone by ~0.42 scroll)
     - Star fade-out:     starAmt  (fades ~0.55 → 0.95, i.e. after the nebula)
     - Palette:           C1 (cool-purple edges) / C2 / C3 (medium-pink core)
+
+  Performance: renders behind a frame-time governor that steps quality down a ladder
+  (octaves + resolution) if it can't hold ~60fps, so it stays smooth on weak GPUs.
+  Test it on ANY machine via URL params:
+    - ?load=N            inject synthetic GPU load (N up to 256) to emulate a weak GPU
+    - ?quality=high|medium|low|potato   lock a quality tier (disables the auto-governor)
+    - ?debug             show an FPS / tier / resolution HUD (or press ` to toggle)
 -->
 <style>
   :root { color-scheme: dark; }
@@ -113,6 +120,7 @@
     "uniform float u_aspect;",
     "uniform int   u_octaves;",
     "uniform float u_scroll;",   // 0 (top / night) -> 1 (bottom / day)
+    "uniform int   u_load;",     // synthetic GPU load for perf testing (?load=N); 0 in normal use
     "",
     "// Nebula gas palette: cooler-purple outer edges -> medium-pink core.",
     "const vec3 C1   = vec3(0.175, 0.060, 0.480);",
@@ -205,6 +213,18 @@
     "  st *= (1.0 - d * 0.65);",
     "  col += STAR * st * starAmt;",
     "",
+    "  // ---- Synthetic GPU load (test only): ?load=N adds N heavy noise evals/pixel so a",
+    "  //      fast machine can emulate a weak GPU and exercise the perf governor. 0 = off,",
+    "  //      and the contribution is scaled to ~nothing so it never changes the picture. ----",
+    "  float ld = 0.0;",
+    "  for (int i = 0; i < 256; i++){",
+    "    if (i >= u_load) break;",
+    "    float fi = float(i);",
+    "    ld += vnoise(base * (3.0 + fi) + T) + vnoise(base * (7.0 + fi) - T)",
+    "        + vnoise(base * (11.0 + fi) + T * 0.5) + vnoise(base * (13.0 + fi));",
+    "  }",
+    "  col += ld * 1e-5;",
+    "",
     "  // ---- Grade: vignette relaxes toward daytime open sky ----",
     "  float vigNight = mix(0.62, 1.0, smoothstep(1.35, 0.15, length(v_uv - 0.5)));",
     "  float vig = mix(vigNight, 1.0, s);",
@@ -241,10 +261,36 @@
   var uAspect = gl.getUniformLocation(prog, "u_aspect");
   var uOct = gl.getUniformLocation(prog, "u_octaves");
   var uScroll = gl.getUniformLocation(prog, "u_scroll");
+  var uLoad = gl.getUniformLocation(prog, "u_load");
+
+  // ===================== Test/debug knobs (URL params) =====================
+  //   ?load=N         inject N heavy noise evals/pixel — emulate a weak GPU on fast hardware
+  //   ?quality=X      lock a tier (high | medium | low | potato), disabling the auto-governor
+  //   ?debug / ?stats show an FPS/quality HUD (also toggled live with the ` backtick key)
+  var qs = new URLSearchParams(location.search);
+  var loadN = Math.max(0, Math.min(256, parseInt(qs.get("load"), 10) || 0));
+  var forced = false;
+  var showStats = qs.has("debug") || qs.has("stats");
 
   // ===================== Sizing + performance governor =====================
-  var aspect = 1, renderScale = Math.min(window.devicePixelRatio || 1, 1.5);
-  var octaves = 5, MAX_PX = 1.5e6;
+  // Quality ladder, best (0) -> worst. The governor only ever steps *down* (toward cheaper)
+  // so a weak GPU settles and stays put — no resolution flicker from bouncing back and forth.
+  var DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  var LADDER = [
+    { oct: 5, scale: DPR },
+    { oct: 5, scale: Math.min(DPR, 1.0) },
+    { oct: 4, scale: Math.min(DPR, 1.0) },
+    { oct: 4, scale: 0.80 },
+    { oct: 3, scale: 0.70 },
+    { oct: 3, scale: 0.55 },
+    { oct: 2, scale: 0.45 }   // "potato" floor: still legible, just softer/less wispy
+  ];
+  var MAX_TIER = LADDER.length - 1;
+  var QMAP = { high: 0, medium: 2, med: 2, low: 4, potato: 6 };
+  var q = (qs.get("quality") || qs.get("q") || "").toLowerCase();
+  var tier = (q in QMAP) ? (forced = true, QMAP[q]) : 0;
+
+  var aspect = 1, renderScale = LADDER[tier].scale, octaves = LADDER[tier].oct, MAX_PX = 1.5e6;
   function resize() {
     var cw = window.innerWidth, ch = window.innerHeight;
     var w = Math.max(1, Math.floor(cw * renderScale));
@@ -253,8 +299,26 @@
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     aspect = cw / ch;
   }
+  function applyTier() { renderScale = LADDER[tier].scale; octaves = LADDER[tier].oct; resize(); }
   window.addEventListener("resize", resize);
-  resize();
+  applyTier();
+
+  // ===================== Stats HUD (only built if asked for) =====================
+  var hud = null;
+  function ensureHud() {
+    if (hud) return;
+    hud = document.createElement("div");
+    hud.setAttribute("style",
+      "position:fixed;top:8px;left:8px;z-index:9999;padding:6px 9px;border-radius:6px;" +
+      "font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:#bfe;" +
+      "background:rgba(0,0,0,0.62);white-space:pre;pointer-events:none;");
+    document.body.appendChild(hud);
+  }
+  if (showStats) ensureHud();
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "`") { showStats = !showStats; if (showStats) ensureHud(); else if (hud) hud.style.display = "none"; }
+    else if (hud && showStats) hud.style.display = "";
+  });
 
   // ===================== Scroll progress (0 top -> 1 bottom), smoothed =====================
   var targetS = 0, scrollS = 0;
@@ -268,19 +332,26 @@
   readScroll();
 
   // ===================== Frame loop =====================
-  var last = -1, start = -1, ema = 16, frames = 0, downgrades = 0;
+  // Governor: react to a sustained slow patch (ema over budget for a continuous streak),
+  // after an initial grace period so first-load shader compile / texture upload jank is
+  // ignored. ~45fps (22ms) is the downgrade trigger; budget aims to keep ~60fps.
+  var last = -1, start = -1, ema = 16, grace = 0, slowStreak = 0, hudAcc = 0;
   function frame(t) {
     if (start < 0) start = t;
     if (last < 0) last = t;
     var dtms = t - last; last = t;
     var nowSec = (t - start) / 1000;
 
-    ema = ema * 0.9 + dtms * 0.1; frames++;
-    if (frames > 80 && ema > 20 && downgrades < 3) {
-      downgrades++; frames = 0;
-      if (downgrades === 1) octaves = 4;
-      else if (downgrades === 2) octaves = 3;
-      else { renderScale = Math.max(0.75, renderScale * 0.8); resize(); }
+    ema = ema * 0.9 + dtms * 0.1;
+    if (!forced) {
+      grace++;
+      if (grace > 60) {                              // skip ~first second of load
+        if (ema > 22 && tier < MAX_TIER) slowStreak++; else slowStreak = 0;
+        if (slowStreak > 24) {                        // ~sustained slow, not a one-off spike
+          tier++; applyTier();
+          slowStreak = 0; grace = 30; ema = 16;       // settle before judging the next step
+        }
+      }
     }
 
     scrollS += (targetS - scrollS) * 0.08; // ease scroll for smooth transitions
@@ -291,7 +362,22 @@
     gl.uniform1f(uAspect, aspect);
     gl.uniform1i(uOct, octaves);
     gl.uniform1f(uScroll, scrollS);
+    gl.uniform1i(uLoad, loadN);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    if (showStats && hud) {
+      hudAcc += dtms;
+      if (hudAcc > 250) {                             // refresh HUD ~4x/sec
+        hudAcc = 0;
+        hud.style.display = "";
+        hud.textContent =
+          "fps   " + (1000 / ema).toFixed(0).padStart(3) + "  (" + ema.toFixed(1) + " ms)\n" +
+          "tier  " + tier + "/" + MAX_TIER + (forced ? " (locked)" : "") + "\n" +
+          "oct   " + octaves + "   scale " + renderScale.toFixed(2) + "\n" +
+          "px    " + canvas.width + "x" + canvas.height + "  dpr " + DPR.toFixed(2) + "\n" +
+          "load  " + loadN;
+      }
+    }
     raf = requestAnimationFrame(frame);
   }
   var raf = requestAnimationFrame(frame);

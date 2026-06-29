@@ -34,8 +34,26 @@ All knobs are near the top of the fragment shader / JS in `index.html`:
 - **Animation speed** — the `* T` multipliers in the density block
 - **Scroll easing** — `scrollS += (targetS - scrollS) * 0.08`
 
+## Performance & weak hardware
+
+It renders at `min(devicePixelRatio, 1.5)`, capped to ~1.5M pixels, behind a frame-time
+**governor**: if it can't hold ~60fps, it steps *down* a quality ladder (fewer fBm octaves,
+then lower resolution) until it settles. It only ever steps down, so a slow GPU lands on a
+stable tier instead of flickering between resolutions. The worst tier ("potato") is still a
+legible nebula — just softer.
+
+You can test the slow path on **any** machine (including fast ones) via URL params:
+
+| Param | Effect |
+|-------|--------|
+| `?debug` | Show an FPS / tier / octaves / resolution HUD. Toggle live with the `` ` `` backtick key. |
+| `?load=N` | Inject `N` (0–256) heavy noise evals per pixel — synthetic GPU load to emulate a weak GPU. Crank it until frame time rises and watch the governor react. |
+| `?quality=high\|medium\|low\|potato` | Lock a quality tier (disables the auto-governor) so you can eyeball how each one looks. |
+
+Example: `index.html?debug&load=200` on a fast laptop drives the frame time up and you'll see
+the governor walk down the tiers and settle. `index.html?quality=potato` shows the floor.
+
 ## Notes
 
 - WebGL2 with a WebGL1 fallback; needs no extensions. Falls back gracefully where WebGL is unavailable.
-- Renders at `min(devicePixelRatio, 1.5)` with a frame-time governor that lowers detail if a frame budget is missed, so it stays smooth on integrated GPUs.
 - Pauses rendering when the tab is hidden.
