@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Genesis — night to day</title>
+<!--
+  GENESIS · scroll-driven night→day space background.
+
+  To drop into your portfolio:
+    1. Put <canvas id="bg"></canvas> as the first element in <body>.
+    2. Keep the #bg CSS (position:fixed; inset:0; z-index:-1) so it sits behind content.
+    3. Paste the <script> block.
+    4. Make sure the page is taller than the viewport — the effect is driven by how
+       far you've scrolled (0 at top, 1 at bottom). The demo sections below exist only
+       to give the page scroll height; replace them with your real content.
+
+  Tuning lives in the fragment shader / JS (search for these):
+    - SKY colors:        nightCol / twilightCol / dayCol
+    - Nebula fade-out:   nebAmt   (gone by ~0.42 scroll)
+    - Star fade-out:     starAmt  (fades ~0.55 → 0.95, i.e. after the nebula)
+    - Palette:           C1 (cool-purple edges) / C2 / C3 (medium-pink core)
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  /* The background canvas: fixed behind everything. */
+  #bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+
+  /* --- Demo content (replace with your portfolio) --- */
+  main { position: relative; z-index: 1; }
+  section {
+    min-height: 100vh; box-sizing: border-box;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 max(8vw, 24px);
+  }
+  .eyebrow { font-size: 13px; letter-spacing: 0.32em; text-transform: uppercase; opacity: 0.7; margin: 0 0 16px; }
+  h1 { font-size: clamp(40px, 9vw, 120px); line-height: 0.98; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(28px, 5vw, 64px); margin: 0 0 14px; font-weight: 650; letter-spacing: -0.01em; }
+  p  { font-size: clamp(15px, 1.6vw, 19px); line-height: 1.6; max-width: 56ch; margin: 0; }
+
+  /* Top sections sit on dark sky -> light text; bottom section sits on day sky -> dark text. */
+  .on-dark  { color: #eaf2ff; text-shadow: 0 2px 30px rgba(0,0,0,0.55); }
+  .on-light { color: #0b2138; text-shadow: 0 1px 1px rgba(255,255,255,0.35); }
+
+  .scrollhint {
+    position: fixed; left: 50%; bottom: 4vh; transform: translateX(-50%); z-index: 2;
+    color: rgba(230,240,255,0.7); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    pointer-events: none; animation: fade 6s ease-in-out forwards;
+  }
+  @keyframes fade { 0%,55% { opacity: 0.7 } 100% { opacity: 0 } }
+</style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+
+  <main>
+    <section><div class="on-dark">
+      <p class="eyebrow">Genesis</p>
+      <h1>Your Name</h1>
+      <p style="margin-top:20px">Designer &amp; developer. Scroll from night into day.</p>
+    </div></section>
+
+    <section><div class="on-dark">
+      <h2>About</h2>
+      <p>This is placeholder content so the page has something to scroll. As you move down,
+         the nebula dissolves into the dark, the stars linger, and the sky slowly warms toward dawn.</p>
+    </div></section>
+
+    <section><div class="on-dark">
+      <h2>Selected Work</h2>
+      <p>By now the nebula is gone and only the stars remain over a deepening twilight. Replace these
+         sections with your projects, case studies, or whatever your portfolio needs.</p>
+    </div></section>
+
+    <section><div class="on-light">
+      <h2>Contact</h2>
+      <p>You've reached daytime — the stars have faded and the sky is open and bright. Dark text reads
+         cleanly here. hello@yourname.com</p>
+    </div></section>
+  </main>
+
+  <div class="scrollhint">scroll ↓</div>
+
+<script>
+"use strict";
+(function () {
+  var canvas = document.getElementById("bg");
+
+  var glOpts = { antialias: false, depth: false, stencil: false, alpha: false,
+                 preserveDrawingBuffer: false, powerPreference: "high-performance" };
+  var gl = canvas.getContext("webgl2", glOpts);
+  if (!gl) gl = canvas.getContext("webgl", glOpts) || canvas.getContext("experimental-webgl", glOpts);
+  if (!gl) return;
+
+  // ===================== Shaders =====================
+  var VERT = [
+    "attribute vec2 a_pos;",
+    "varying vec2 v_uv;",
+    "void main(){ v_uv = a_pos * 0.5 + 0.5; gl_Position = vec4(a_pos, 0.0, 1.0); }"
+  ].join("\n");
+
+  var FRAG = [
+    "#ifdef GL_FRAGMENT_PRECISION_HIGH",
+    "precision highp float;",
+    "#else",
+    "precision mediump float;",
+    "#endif",
+    "varying vec2 v_uv;",
+    "uniform float u_time;",
+    "uniform float u_aspect;",
+    "uniform int   u_octaves;",
+    "uniform float u_scroll;",   // 0 (top / night) -> 1 (bottom / day)
+    "",
+    "// Nebula gas palette: cooler-purple outer edges -> medium-pink core.",
+    "const vec3 C1   = vec3(0.175, 0.060, 0.480);",
+    "const vec3 C2   = vec3(0.560, 0.155, 0.500);",
+    "const vec3 C3   = vec3(0.880, 0.400, 0.560);",
+    "const vec3 STAR = vec3(1.000, 0.920, 0.970);",
+    "",
+    "float hash(vec2 p){",
+    "  p = fract(p * vec2(123.34, 345.45));",
+    "  p += dot(p, p + 34.345);",
+    "  return fract(p.x * p.y);",
+    "}",
+    "float vnoise(vec2 p){",
+    "  vec2 i = floor(p); vec2 f = fract(p);",
+    "  vec2 u = f * f * (3.0 - 2.0 * f);",
+    "  float a = hash(i);",
+    "  float b = hash(i + vec2(1.0, 0.0));",
+    "  float c = hash(i + vec2(0.0, 1.0));",
+    "  float d = hash(i + vec2(1.0, 1.0));",
+    "  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);",
+    "}",
+    "float fbm(vec2 p){",
+    "  float a = 0.5, sum = 0.0;",
+    "  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);",
+    "  for(int i = 0; i < 5; i++){",
+    "    if(i >= u_octaves) break;",
+    "    sum += a * vnoise(p);",
+    "    p = m * p;",
+    "    a *= 0.5;",
+    "  }",
+    "  return sum;",
+    "}",
+    "",
+    "float starLayer(vec2 uv, float density, float sz, float seed){",
+    "  vec2 g = uv * density + seed;",
+    "  vec2 ip = floor(g); vec2 fp = fract(g) - 0.5;",
+    "  float h = hash(ip + seed);",
+    "  float present = step(0.986, h);",
+    "  float tw = 0.55 + 0.45 * sin(u_time * 1.6 + h * 220.0);",
+    "  float d = length(fp);",
+    "  return present * smoothstep(sz, 0.0, d) * tw;",
+    "}",
+    "",
+    "// --- Night -> twilight -> day sky, as a vertical gradient (y: 0 bottom, 1 top) ---",
+    "vec3 nightCol(float y){    return mix(vec3(0.006, 0.012, 0.035), vec3(0.0, 0.0, 0.008), y); }",
+    "vec3 twilightCol(float y){ return mix(vec3(0.42, 0.20, 0.26),   vec3(0.05, 0.06, 0.16), smoothstep(0.0, 0.75, y)); }",
+    "vec3 dayCol(float y){      return mix(vec3(0.66, 0.83, 0.97),   vec3(0.26, 0.55, 0.88), y); }",
+    "vec3 skyColor(float y, float s){",
+    "  vec3 c = mix(nightCol(y), twilightCol(y), smoothstep(0.0, 0.5, s));",
+    "  c = mix(c, dayCol(y), smoothstep(0.5, 1.0, s));",
+    "  return c;",
+    "}",
+    "",
+    "void main(){",
+    "  float T = u_time;",
+    "  float s = u_scroll;",
+    "  vec2 base = vec2(v_uv.x * u_aspect, v_uv.y);",
+    "",
+    "  // ---- Nebula density: slowly-evolving, domain-warped fBm gas clouds ----",
+    "  vec2 p = base * 2.6 + vec2(0.010, 0.006) * T;",
+    "  vec2 q = vec2(fbm(p + vec2(0.0, 0.05 * T)),",
+    "                fbm(p + vec2(3.2, 1.3) + vec2(0.04 * T, 0.0)));",
+    "  vec2 r = vec2(fbm(p + 1.5 * q + vec2(1.7, 9.2) + 0.030 * T),",
+    "                fbm(p + 1.5 * q + vec2(8.3, 2.8) - 0.025 * T));",
+    "  float baseD = fbm(p + 1.5 * r + vec2(0.0, 0.020 * T));",
+    "  float detail = fbm(p * 2.4 - r + vec2(0.03 * T, 0.0));",
+    "  float d = baseD * 0.72 + detail * 0.38;",
+    "  d = smoothstep(0.42, 0.97, d);",
+    "  d = pow(d, 1.5);",
+    "",
+    "  // ---- Nebula gas color (additive over the sky; 0 in the voids) ----",
+    "  vec3 gas = vec3(0.0);",
+    "  gas = mix(gas, C1, smoothstep(0.00, 0.45, d));",
+    "  gas = mix(gas, C2, smoothstep(0.38, 0.78, d));",
+    "  gas = mix(gas, C3, smoothstep(0.70, 1.00, d));",
+    "  gas += C3 * pow(d, 6.0) * 0.09;",
+    "",
+    "  // ---- Scroll-driven amounts ----",
+    "  float nebAmt  = 1.0 - smoothstep(0.00, 0.42, s);",  // nebula fully gone by ~42%
+    "  float starAmt = 1.0 - smoothstep(0.55, 0.95, s);",  // stars fade AFTER the nebula
+    "",
+    "  vec3 col = skyColor(v_uv.y, s);",
+    "  col += gas * nebAmt;",
+    "",
+    "  // ---- Stars (two depths), hidden behind dense gas, fading with daylight ----",
+    "  float st = starLayer(base, 70.0, 0.13, 11.0) + 0.7 * starLayer(base, 128.0, 0.10, 47.0);",
+    "  st *= (1.0 - d * 0.65);",
+    "  col += STAR * st * starAmt;",
+    "",
+    "  // ---- Grade: vignette relaxes toward daytime open sky ----",
+    "  float vigNight = mix(0.62, 1.0, smoothstep(1.35, 0.15, length(v_uv - 0.5)));",
+    "  float vig = mix(vigNight, 1.0, s);",
+    "  col *= vig;",
+    "  col = pow(max(col, 0.0), vec3(1.0 / 2.2));",
+    "  col += (hash(gl_FragCoord.xy + T) - 0.5) / 255.0;", // dither
+    "  gl_FragColor = vec4(col, 1.0);",
+    "}"
+  ].join("\n");
+
+  // ===================== GL setup =====================
+  function compile(type, src) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(sh)); return null; }
+    return sh;
+  }
+  var prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.bindAttribLocation(prog, 0, "a_pos");
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(prog)); return; }
+  gl.useProgram(prog);
+
+  var quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+  var uTime = gl.getUniformLocation(prog, "u_time");
+  var uAspect = gl.getUniformLocation(prog, "u_aspect");
+  var uOct = gl.getUniformLocation(prog, "u_octaves");
+  var uScroll = gl.getUniformLocation(prog, "u_scroll");
+
+  // ===================== Sizing + performance governor =====================
+  var aspect = 1, renderScale = Math.min(window.devicePixelRatio || 1, 1.5);
+  var octaves = 5, MAX_PX = 1.5e6;
+  function resize() {
+    var cw = window.innerWidth, ch = window.innerHeight;
+    var w = Math.max(1, Math.floor(cw * renderScale));
+    var h = Math.max(1, Math.floor(ch * renderScale));
+    if (w * h > MAX_PX) { var k = Math.sqrt(MAX_PX / (w * h)); w = Math.floor(w * k); h = Math.floor(h * k); }
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    aspect = cw / ch;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ===================== Scroll progress (0 top -> 1 bottom), smoothed =====================
+  var targetS = 0, scrollS = 0;
+  function readScroll() {
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - window.innerHeight;
+    targetS = max > 0 ? Math.min(Math.max((window.scrollY || doc.scrollTop || 0) / max, 0), 1) : 0;
+  }
+  window.addEventListener("scroll", readScroll, { passive: true });
+  window.addEventListener("resize", readScroll);
+  readScroll();
+
+  // ===================== Frame loop =====================
+  var last = -1, start = -1, ema = 16, frames = 0, downgrades = 0;
+  function frame(t) {
+    if (start < 0) start = t;
+    if (last < 0) last = t;
+    var dtms = t - last; last = t;
+    var nowSec = (t - start) / 1000;
+
+    ema = ema * 0.9 + dtms * 0.1; frames++;
+    if (frames > 80 && ema > 20 && downgrades < 3) {
+      downgrades++; frames = 0;
+      if (downgrades === 1) octaves = 4;
+      else if (downgrades === 2) octaves = 3;
+      else { renderScale = Math.max(0.75, renderScale * 0.8); resize(); }
+    }
+
+    scrollS += (targetS - scrollS) * 0.08; // ease scroll for smooth transitions
+
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(prog);
+    gl.uniform1f(uTime, nowSec);
+    gl.uniform1f(uAspect, aspect);
+    gl.uniform1i(uOct, octaves);
+    gl.uniform1f(uScroll, scrollS);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    raf = requestAnimationFrame(frame);
+  }
+  var raf = requestAnimationFrame(frame);
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = -1; raf = requestAnimationFrame(frame); }
+  });
+  canvas.addEventListener("webglcontextlost", function (e) { e.preventDefault(); cancelAnimationFrame(raf); });
+  canvas.addEventListener("webglcontextrestored", function () { location.reload(); });
+})();
+</script>
+</body>
+</html>
