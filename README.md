@@ -37,23 +37,33 @@ All knobs are near the top of the fragment shader / JS in `index.html`:
 ## Performance & weak hardware
 
 It renders at `min(devicePixelRatio, 1.5)`, capped to ~1.5M pixels, behind a frame-time
-**governor**: if it can't hold ~60fps, it steps *down* a quality ladder (fewer fBm octaves,
-then lower resolution) until it settles. It only ever steps down, so a slow GPU lands on a
-stable tier instead of flickering between resolutions. The worst tier ("potato") is still a
-legible nebula — just softer.
+**governor**: if it can't hold ~60fps it steps *down* an 8-rung quality ladder until it
+settles. It only ever steps down, so a slow GPU lands on a stable tier instead of flickering
+between resolutions. The governor's clock is wall-time, so a 25fps device reacts as fast in
+real seconds as a 60fps one.
 
-You can test the slow path on **any** machine (including fast ones) via URL params:
+Crucially, the ladder sheds the **expensive swirl** (domain-warp folds) *before* it sheds
+detail (fBm octaves) or resolution — so cheaper tiers still read as a wispy nebula rather than
+a flat blur. If even the lowest animated tier can't keep up, it switches to **static mode**:
+the animation freezes and the canvas repaints only on scroll. Because a static frame isn't
+running at 60fps, it renders at near-full detail — the weakest devices get a *crisp* frozen
+nebula (that still shifts night→day as you scroll), not a smooth blur.
+
+`prefers-reduced-motion: reduce` uses that same static path automatically, and there's a CSS
+gradient fallback if WebGL is entirely unavailable.
+
+You can test all of this on **any** machine (including fast ones) via URL params:
 
 | Param | Effect |
 |-------|--------|
-| `?debug` | Show an FPS / tier / octaves / resolution HUD. Toggle live with the `` ` `` backtick key. |
+| `?debug` | Show an FPS / tier / octaves / warp / resolution HUD. Toggle live with the `` ` `` backtick key. |
 | `?load=N` | Inject `N` (0–256) heavy noise evals per pixel — synthetic GPU load to emulate a weak GPU. Crank it until frame time rises and watch the governor react. |
-| `?quality=high\|medium\|low\|potato` | Lock a quality tier (disables the auto-governor) so you can eyeball how each one looks. |
+| `?quality=high\|medium\|low\|potato\|static` | Lock a quality tier (disables the auto-governor) so you can eyeball each one. `static` is the frozen-but-crisp fallback. |
 
 Example: `index.html?debug&load=200` on a fast laptop drives the frame time up and you'll see
-the governor walk down the tiers and settle. `index.html?quality=potato` shows the floor.
+the governor walk down the tiers and settle. `index.html?quality=static` shows the frozen fallback.
 
 ## Notes
 
-- WebGL2 with a WebGL1 fallback; needs no extensions. Falls back gracefully where WebGL is unavailable.
-- Pauses rendering when the tab is hidden.
+- WebGL2 with a WebGL1 fallback; needs no extensions. Falls back to a CSS gradient where WebGL is unavailable.
+- Pauses rendering when the tab is hidden; honors `prefers-reduced-motion`.

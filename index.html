@@ -31,10 +31,12 @@
 <style>
   :root { color-scheme: dark; }
   html, body { margin: 0; }
+  /* Static fallback gradient — shown only if WebGL is unavailable (the canvas stays empty). */
+  html { background: linear-gradient(180deg, #04060f 0%, #0a0d1c 55%, #24395e 100%); }
   body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
 
-  /* The background canvas: fixed behind everything. */
-  #bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+  /* The background canvas: fixed behind everything. (background:#04060f avoids a flash before first paint.) */
+  #bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; background: #04060f; }
 
   /* --- Demo content (replace with your portfolio) --- */
   main { position: relative; z-index: 1; }
@@ -121,6 +123,7 @@
     "uniform int   u_octaves;",
     "uniform float u_scroll;",   // 0 (top / night) -> 1 (bottom / day)
     "uniform int   u_load;",     // synthetic GPU load for perf testing (?load=N); 0 in normal use
+    "uniform int   u_warp;",     // domain-warp folds: 2 full / 1 single / 0 none (quality knob)
     "",
     "// Nebula gas palette: cooler-purple outer edges -> medium-pink core.",
     "const vec3 C1   = vec3(0.175, 0.060, 0.480);",
@@ -180,13 +183,23 @@
     "  vec2 base = vec2(v_uv.x * u_aspect, v_uv.y);",
     "",
     "  // ---- Nebula density: slowly-evolving, domain-warped fBm gas clouds ----",
+    "  // u_warp picks how many domain-warp folds we pay for. Each fold adds large-scale swirl",
+    "  // but costs 2 fBm evals; the fine wispy character comes from the octaves, which we keep",
+    "  // as high as we can. So cheaper tiers shed warp folds first, not detail -> no flat blur.",
     "  vec2 p = base * 2.6 + vec2(0.010, 0.006) * T;",
-    "  vec2 q = vec2(fbm(p + vec2(0.0, 0.05 * T)),",
-    "                fbm(p + vec2(3.2, 1.3) + vec2(0.04 * T, 0.0)));",
-    "  vec2 r = vec2(fbm(p + 1.5 * q + vec2(1.7, 9.2) + 0.030 * T),",
-    "                fbm(p + 1.5 * q + vec2(8.3, 2.8) - 0.025 * T));",
-    "  float baseD = fbm(p + 1.5 * r + vec2(0.0, 0.020 * T));",
-    "  float detail = fbm(p * 2.4 - r + vec2(0.03 * T, 0.0));",
+    "  vec2 w = vec2(0.0);",
+    "  if (u_warp >= 1) {",
+    "    vec2 q = vec2(fbm(p + vec2(0.0, 0.05 * T)),",
+    "                  fbm(p + vec2(3.2, 1.3) + vec2(0.04 * T, 0.0)));",
+    "    w = 1.5 * q;",
+    "    if (u_warp >= 2) {",
+    "      vec2 r = vec2(fbm(p + 1.5 * q + vec2(1.7, 9.2) + 0.030 * T),",
+    "                    fbm(p + 1.5 * q + vec2(8.3, 2.8) - 0.025 * T));",
+    "      w = 1.5 * r;",
+    "    }",
+    "  }",
+    "  float baseD = fbm(p + w + vec2(0.0, 0.020 * T));",
+    "  float detail = fbm(p * 2.4 - w + vec2(0.03 * T, 0.0));",
     "  float d = baseD * 0.72 + detail * 0.38;",
     "  d = smoothstep(0.42, 0.97, d);",
     "  d = pow(d, 1.5);",
@@ -262,10 +275,11 @@
   var uOct = gl.getUniformLocation(prog, "u_octaves");
   var uScroll = gl.getUniformLocation(prog, "u_scroll");
   var uLoad = gl.getUniformLocation(prog, "u_load");
+  var uWarp = gl.getUniformLocation(prog, "u_warp");
 
   // ===================== Test/debug knobs (URL params) =====================
   //   ?load=N         inject N heavy noise evals/pixel — emulate a weak GPU on fast hardware
-  //   ?quality=X      lock a tier (high | medium | low | potato), disabling the auto-governor
+  //   ?quality=X      lock a tier (high | medium | low | potato | static), no auto-governor
   //   ?debug / ?stats show an FPS/quality HUD (also toggled live with the ` backtick key)
   var qs = new URLSearchParams(location.search);
   var loadN = Math.max(0, Math.min(256, parseInt(qs.get("load"), 10) || 0));
@@ -275,22 +289,38 @@
   // ===================== Sizing + performance governor =====================
   // Quality ladder, best (0) -> worst. The governor only ever steps *down* (toward cheaper)
   // so a weak GPU settles and stays put — no resolution flicker from bouncing back and forth.
+  // If it's still slow at the floor, it drops to STATIC mode (freeze the animation; repaint
+  // only on scroll) — the same path used for prefers-reduced-motion and ?quality=static.
+  // Each tier sheds the *expensive* swirl (warp folds) before it sheds detail (octaves) or
+  // resolution, so cheaper tiers still read as a wispy nebula instead of a flat blur.
   var DPR = Math.min(window.devicePixelRatio || 1, 1.5);
   var LADDER = [
-    { oct: 5, scale: DPR },
-    { oct: 5, scale: Math.min(DPR, 1.0) },
-    { oct: 4, scale: Math.min(DPR, 1.0) },
-    { oct: 4, scale: 0.80 },
-    { oct: 3, scale: 0.70 },
-    { oct: 3, scale: 0.55 },
-    { oct: 2, scale: 0.45 }   // "potato" floor: still legible, just softer/less wispy
+    { oct: 5, warp: 2, scale: DPR },
+    { oct: 5, warp: 2, scale: Math.min(DPR, 1.0) },
+    { oct: 5, warp: 1, scale: Math.min(DPR, 1.0) },  // single-fold warp: ~full look, big cost cut
+    { oct: 4, warp: 1, scale: Math.min(DPR, 1.0) },
+    { oct: 4, warp: 1, scale: 0.85 },
+    { oct: 4, warp: 0, scale: 0.80 },                // no swirl, but 4 octaves keep gas texture
+    { oct: 3, warp: 0, scale: 0.70 },
+    { oct: 3, warp: 0, scale: 0.60 }                 // animated floor; below this -> static-crisp
   ];
   var MAX_TIER = LADDER.length - 1;
-  var QMAP = { high: 0, medium: 2, med: 2, low: 4, potato: 6 };
+  var STATIC_TIER = 1;   // static repaints are infrequent, so they can afford near-full detail
+  var QMAP = { high: 0, medium: 2, med: 2, low: 5, potato: 7 };
   var q = (qs.get("quality") || qs.get("q") || "").toLowerCase();
   var tier = (q in QMAP) ? (forced = true, QMAP[q]) : 0;
 
-  var aspect = 1, renderScale = LADDER[tier].scale, octaves = LADDER[tier].oct, MAX_PX = 1.5e6;
+  // Static mode: paint once, then repaint only on scroll. The night->day shift still tracks
+  // scroll; the nebula just stops drifting and the stars stop twinkling. Zero GPU while idle.
+  // Because it isn't running at 60fps, it renders at the crisp STATIC_TIER, not a blurry floor.
+  var reduceMotion = false;
+  try { reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+  var staticMode = (q === "static") || reduceMotion;
+  if (q === "static") forced = true;
+  if (staticMode) tier = STATIC_TIER;
+  var STATIC_T = 8.0;  // frozen time for static renders (a pleasant, settled cloud composition)
+
+  var aspect = 1, renderScale = LADDER[tier].scale, octaves = LADDER[tier].oct, warpLevel = LADDER[tier].warp, MAX_PX = 1.5e6;
   function resize() {
     var cw = window.innerWidth, ch = window.innerHeight;
     var w = Math.max(1, Math.floor(cw * renderScale));
@@ -299,7 +329,7 @@
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     aspect = cw / ch;
   }
-  function applyTier() { renderScale = LADDER[tier].scale; octaves = LADDER[tier].oct; resize(); }
+  function applyTier() { renderScale = LADDER[tier].scale; octaves = LADDER[tier].oct; warpLevel = LADDER[tier].warp; resize(); }
   window.addEventListener("resize", resize);
   applyTier();
 
@@ -316,8 +346,10 @@
   }
   if (showStats) ensureHud();
   window.addEventListener("keydown", function (e) {
-    if (e.key === "`") { showStats = !showStats; if (showStats) ensureHud(); else if (hud) hud.style.display = "none"; }
-    else if (hud && showStats) hud.style.display = "";
+    if (e.key !== "`") return;
+    showStats = !showStats;
+    if (showStats) { ensureHud(); if (staticMode) requestStatic(); }  // repaint to fill the HUD
+    else if (hud) hud.style.display = "none";
   });
 
   // ===================== Scroll progress (0 top -> 1 bottom), smoothed =====================
@@ -326,16 +358,61 @@
     var doc = document.documentElement;
     var max = doc.scrollHeight - window.innerHeight;
     targetS = max > 0 ? Math.min(Math.max((window.scrollY || doc.scrollTop || 0) / max, 0), 1) : 0;
+    if (staticMode) requestStatic();   // no continuous loop in static mode — repaint on demand
   }
   window.addEventListener("scroll", readScroll, { passive: true });
   window.addEventListener("resize", readScroll);
   readScroll();
 
-  // ===================== Frame loop =====================
-  // Governor: react to a sustained slow patch (ema over budget for a continuous streak),
-  // after an initial grace period so first-load shader compile / texture upload jank is
-  // ignored. ~45fps (22ms) is the downgrade trigger; budget aims to keep ~60fps.
-  var last = -1, start = -1, ema = 16, grace = 0, slowStreak = 0, hudAcc = 0;
+  // ===================== Draw + HUD =====================
+  function draw(T) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(prog);
+    gl.uniform1f(uTime, T);
+    gl.uniform1f(uAspect, aspect);
+    gl.uniform1i(uOct, octaves);
+    gl.uniform1f(uScroll, scrollS);
+    gl.uniform1i(uLoad, loadN);
+    gl.uniform1i(uWarp, warpLevel);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function updateHud(fpsTxt) {
+    if (!(showStats && hud)) return;
+    hud.style.display = "";
+    hud.textContent =
+      "fps   " + fpsTxt + "\n" +
+      "tier  " + tier + "/" + MAX_TIER + (staticMode ? " (static)" : (forced ? " (locked)" : "")) + "\n" +
+      "oct   " + octaves + "  warp " + warpLevel + "  scale " + renderScale.toFixed(2) + "\n" +
+      "px    " + canvas.width + "x" + canvas.height + "  dpr " + DPR.toFixed(2) + "\n" +
+      "load  " + loadN;
+  }
+
+  // ===================== Static mode (paint-on-scroll, zero idle GPU) =====================
+  var pendingStatic = false;
+  function renderStatic() {
+    scrollS = targetS;            // snap — no autonomous easing when motion is reduced
+    draw(STATIC_T);
+    updateHud("static");
+  }
+  function requestStatic() {      // coalesce bursts of scroll events into one repaint per frame
+    if (!staticMode || pendingStatic) return;
+    pendingStatic = true;
+    requestAnimationFrame(function () { pendingStatic = false; renderStatic(); });
+  }
+  function goStatic(T) {          // governor hit the floor and is still slow: stop animating
+    if (staticMode) return;
+    staticMode = true;
+    if (raf) cancelAnimationFrame(raf); raf = 0;
+    if (typeof T === "number") STATIC_T = T;   // freeze at the current moment for continuity
+    renderStatic();
+  }
+
+  // ===================== Animated frame loop + governor =====================
+  // Governor reacts to a sustained slow patch (ema over budget), after a grace period so
+  // first-load shader compile / upload jank is ignored. Timing is wall-clock (ms), so a weak
+  // device that runs at 25fps reacts just as fast in real time as a 60fps one. ~45fps (22ms)
+  // is the downgrade trigger; the budget targets ~60fps.
+  var last = -1, start = -1, ema = 16, graceMs = 0, slowMs = 0, hudAcc = 0, raf = 0;
   function frame(t) {
     if (start < 0) start = t;
     if (last < 0) last = t;
@@ -344,49 +421,50 @@
 
     ema = ema * 0.9 + dtms * 0.1;
     if (!forced) {
-      grace++;
-      if (grace > 60) {                              // skip ~first second of load
-        if (ema > 22 && tier < MAX_TIER) slowStreak++; else slowStreak = 0;
-        if (slowStreak > 24) {                        // ~sustained slow, not a one-off spike
-          tier++; applyTier();
-          slowStreak = 0; grace = 30; ema = 16;       // settle before judging the next step
+      graceMs += dtms;
+      if (graceMs > 600) {                            // skip ~first 0.6s of load
+        if (ema > 22) slowMs += dtms; else slowMs = 0;
+        if (slowMs > 350) {                           // sustained slow, not a one-off spike
+          if (tier < MAX_TIER) { tier++; applyTier(); slowMs = 0; ema = 16; graceMs = 300; }
+          else { goStatic(nowSec); return; }          // at the floor and still slow -> freeze
         }
       }
     }
 
     scrollS += (targetS - scrollS) * 0.08; // ease scroll for smooth transitions
-
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.useProgram(prog);
-    gl.uniform1f(uTime, nowSec);
-    gl.uniform1f(uAspect, aspect);
-    gl.uniform1i(uOct, octaves);
-    gl.uniform1f(uScroll, scrollS);
-    gl.uniform1i(uLoad, loadN);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    draw(nowSec);
 
     if (showStats && hud) {
       hudAcc += dtms;
-      if (hudAcc > 250) {                             // refresh HUD ~4x/sec
+      if (hudAcc > 250) {  // refresh HUD ~4x/sec
         hudAcc = 0;
-        hud.style.display = "";
-        hud.textContent =
-          "fps   " + (1000 / ema).toFixed(0).padStart(3) + "  (" + ema.toFixed(1) + " ms)\n" +
-          "tier  " + tier + "/" + MAX_TIER + (forced ? " (locked)" : "") + "\n" +
-          "oct   " + octaves + "   scale " + renderScale.toFixed(2) + "\n" +
-          "px    " + canvas.width + "x" + canvas.height + "  dpr " + DPR.toFixed(2) + "\n" +
-          "load  " + loadN;
+        updateHud((1000 / ema).toFixed(0).padStart(3) + "  (" + ema.toFixed(1) + " ms)");
       }
     }
     raf = requestAnimationFrame(frame);
   }
-  var raf = requestAnimationFrame(frame);
+
+  // Start: static path paints once and waits for scroll; otherwise run the animation loop.
+  if (staticMode) renderStatic();
+  else raf = requestAnimationFrame(frame);
+
+  // React if the OS "reduce motion" setting is toggled live (unless a URL param pinned it).
+  try {
+    var mm = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var onMM = function (ev) {
+      if (q === "static") return;
+      if (ev.matches) goStatic();
+      else if (staticMode) { staticMode = false; last = -1; start = -1; raf = requestAnimationFrame(frame); }
+    };
+    if (mm.addEventListener) mm.addEventListener("change", onMM); else if (mm.addListener) mm.addListener(onMM);
+  } catch (e) {}
 
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) cancelAnimationFrame(raf);
+    if (staticMode) return;                           // nothing animating to pause
+    if (document.hidden) { if (raf) cancelAnimationFrame(raf); raf = 0; }
     else { last = -1; raf = requestAnimationFrame(frame); }
   });
-  canvas.addEventListener("webglcontextlost", function (e) { e.preventDefault(); cancelAnimationFrame(raf); });
+  canvas.addEventListener("webglcontextlost", function (e) { e.preventDefault(); if (raf) cancelAnimationFrame(raf); raf = 0; });
   canvas.addEventListener("webglcontextrestored", function () { location.reload(); });
 })();
 </script>
