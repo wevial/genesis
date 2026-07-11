@@ -298,11 +298,11 @@ vec3 skyColor(float y, float s) {
   vec3 top = mix(SKY_TOP[i], SKY_TOP[j], t);
   vec3 mid = mix(SKY_MID[i], SKY_MID[j], t);
   vec3 bot = mix(SKY_BOT[i], SKY_BOT[j], t);
-  // y: 1 at top of screen, 0 at bottom; mid sits low for a horizon glow.
-  float m = 0.35;
-  return y > m
-    ? mix(mid, top, smoothstep(m, 1.0, y))
-    : mix(bot, mid, smoothstep(0.0, m, y));
+  // y: 1 at top of screen, 0 at bottom; mid peaks low for a horizon glow.
+  // Overlapping blends keep the slope continuous — butting two smoothsteps
+  // at a midpoint leaves a flat seam that reads as a dark band.
+  vec3 c = mix(bot, mid, smoothstep(0.0, 0.60, y));
+  return mix(c, top, smoothstep(0.25, 1.0, y));
 }
 
 // --- Bright stars: plain dot with a soft glow halo ---
