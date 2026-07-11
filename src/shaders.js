@@ -305,8 +305,9 @@ vec3 skyColor(float y, float s) {
   return mix(c, top, smoothstep(0.25, 1.0, y));
 }
 
-// --- Bright stars: plain dot with a soft glow halo ---
-vec3 brightStars(vec2 uv) {
+// --- Bright stars: dots with varied size; the glow halo only shows where
+// nebula gas can diffract the light (glow = local gas density). ---
+vec3 brightStars(vec2 uv, float glow) {
   vec2 g = uv * 7.0;
   vec2 id = floor(g);
   vec2 f = fract(g);
@@ -314,10 +315,12 @@ vec3 brightStars(vec2 uv) {
   if (rnd > 0.12) return vec3(0.0);
   vec2 pos = vec2(hash12(id + 17.1), hash12(id + 31.7)) * 0.5 + 0.25;
   float r = length(f - pos);
-  float core = exp(-r * r * 900.0);
-  float halo = exp(-r * r * 70.0) * 0.28;
+  float w = mix(500.0, 2200.0, hash12(id + 23.7)); // core sharpness varies star to star
+  float core = exp(-r * r * w);
+  float halo = exp(-r * r * w * 0.08) * 0.30 * glow;
   vec3 tint = mix(vec3(1.0, 0.86, 0.70), vec3(0.75, 0.85, 1.0), step(0.5, hash12(id + 3.3)));
-  return (core + halo) * tint * (0.6 + 0.4 * hash12(id + 8.8));
+  float amp = 0.30 + 0.70 * pow(hash12(id + 8.8), 2.0); // many dim, few bright
+  return (core + halo) * tint * amp;
 }
 
 // --- Stars: parallax layers of hashed grid points, steady (no twinkle) ---
@@ -342,6 +345,14 @@ void main() {
   // Camera descends as you scroll: stars and nebula slide upward with parallax.
   vec2 suv = vec2(vUv.x * uAspect, vUv.y);
 
+  // Sample the nebula first: local gas density gates the bright-star glow.
+  // The nebula stays in place and dissolves; parallax-shifting it drags the
+  // dye texture's clamped edge across the screen as a visible line.
+  float nebFade = 1.0 - smoothstep(0.16, 0.46, s);
+  vec4 dye = vec4(0.0);
+  if (nebFade > 0.0) dye = texture(uDye, vUv);
+  float gasDen = clamp(dot(dye.rgb, vec3(0.6)) * nebFade, 0.0, 1.0);
+
   float starFade = 1.0 - smoothstep(0.55, 0.82, s);
   if (starFade > 0.0) {
     float stars = 0.0;
@@ -351,20 +362,16 @@ void main() {
     // Faint cool tint on dim stars, white on bright.
     vec3 starCol = mix(vec3(0.70, 0.78, 1.0), vec3(1.0), clamp(stars, 0.0, 1.0));
     col += stars * starCol * starFade;
-    col += brightStars(suv - vec2(-11.0, s * 1.10)) * starFade;
+    float glow = smoothstep(0.02, 0.28, gasDen);
+    col += brightStars(suv - vec2(-11.0, s * 1.10), glow) * starFade;
   }
 
   // Nebula: dust lanes absorb, gas emits. Gone by the time night fully sets in.
-  float nebFade = 1.0 - smoothstep(0.16, 0.46, s);
   if (nebFade > 0.0) {
-    // The nebula stays in place and dissolves; parallax-shifting it drags the
-    // dye texture's clamped edge across the screen as a visible line.
-    vec4 dye = texture(uDye, vUv);
-    float k = nebFade;
-    col *= 1.0 - dye.a * 0.8 * k; // dark dust dims sky and stars behind it
+    col *= 1.0 - dye.a * 0.8 * nebFade; // dark dust dims sky and stars behind it
     // Soft additive: keeps cores hot without clipping to white.
     vec3 gas = 1.0 - exp(-dye.rgb * 1.7);
-    col += gas * k;
+    col += gas * nebFade;
   }
 
   // Gentle filmic-ish curve + dither to prevent gradient banding.
