@@ -87,10 +87,17 @@ export function createDoubleFBO(gl, w, h, internalFormat, format, type, filter) 
   };
 }
 
-// Fullscreen-triangle blit. The vertex shader generates positions from gl_VertexID,
-// so no vertex buffers are needed — just an empty (but bound) VAO.
+// Fullscreen-triangle blit: one oversized triangle at attrib 0, clipped to
+// the viewport. (0.5*aPos+0.5 in the vertex shader yields uv.)
 export function makeBlit(gl) {
   const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
   return function blit(target) {
     gl.bindVertexArray(vao);
     if (target == null) {

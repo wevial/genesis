@@ -2,12 +2,13 @@
 
 export const VERTEX = /* glsl */ `#version 300 es
 precision highp float;
+// A real attribute at location 0 (not gl_VertexID): drawing with attrib 0
+// disabled forces slow emulation on desktop-GL browsers like Firefox/macOS.
+layout(location = 0) in vec2 aPos;
 out vec2 vUv;
 void main() {
-  // Fullscreen triangle from gl_VertexID: (0,0) (2,0) (0,2) in uv space.
-  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-  vUv = p;
-  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+  vUv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
 }
 `;
 
