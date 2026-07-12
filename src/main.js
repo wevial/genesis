@@ -86,17 +86,21 @@ function start(gl) {
     // Ease scroll so the sky glides instead of jumping on wheel ticks.
     scrollSmooth += (scrollTarget - scrollSmooth) * (1 - Math.exp(-dt * 5));
 
-    // Cursor stir: only while the nebula is on screen (it fades out by ~half scroll).
-    // Three jittered sub-splats instead of one clean gaussian, so the pushed
-    // gas front starts out irregular rather than a round blob.
-    if (pointer.active && (pointer.dx !== 0 || pointer.dy !== 0) && scrollSmooth < 0.55) {
-      const f = fluid.config.splatForce * 0.5;
+    // Cursor push, "blend" style: a local radial shove (three jittered
+    // sub-splats written straight into the displacement field — the parting)
+    // plus a soft directional drag through the fluid sim (the wake).
+    // Only while the nebula is on screen (it fades out by ~half scroll).
+    const speed = Math.hypot(pointer.dx, pointer.dy);
+    if (pointer.active && speed > 0 && scrollSmooth < 0.55) {
+      const part = Math.min(speed * 2.8, 0.09);
       for (let i = 0; i < 3; i++) {
-        const jx = (Math.random() - 0.5) * 0.014;
-        const jy = (Math.random() - 0.5) * 0.014;
-        const jf = 0.6 + Math.random() * 0.8;
-        fluid.splat(pointer.x + jx, pointer.y + jy, pointer.dx * f * jf, pointer.dy * f * jf, 0.5 + Math.random() * 0.9);
+        const jx = (Math.random() - 0.5) * 0.016;
+        const jy = (Math.random() - 0.5) * 0.016;
+        const rad = 0.0028 * (0.5 + Math.random());
+        fluid.splat('offset', pointer.x + jx, pointer.y + jy, part * 0.35, 0, rad, 1);
       }
+      const f = fluid.config.splatForce * 0.5;
+      fluid.splat('velocity', pointer.x, pointer.y, pointer.dx * f, pointer.dy * f, 0.0015, 0);
       pointer.dx = 0;
       pointer.dy = 0;
     }
@@ -104,7 +108,7 @@ function start(gl) {
     fluid.step(dt);
 
     composite.use();
-    gl.uniform1i(composite.uniforms.uDye, fluid.dye.read.attach(0));
+    gl.uniform1i(composite.uniforms.uDye, fluid.cloud.attach(0));
     gl.uniform1f(composite.uniforms.uScroll, scrollSmooth);
     gl.uniform1f(composite.uniforms.uTime, time);
     gl.uniform1f(composite.uniforms.uAspect, gl.drawingBufferWidth / gl.drawingBufferHeight);

@@ -115,33 +115,52 @@ void main() {
 }
 `;
 
-// Dye advection fused with relaxation toward the procedural base nebula.
-// The relax term is what heals cursor-stirred gas back into the resting cloud.
-export const DYE_ADVECTION = /* glsl */ `#version 300 es
+// Displacement accumulation: the offset field is carried along by the fluid,
+// picks up this frame's motion, and decays toward zero — so the cloud is only
+// ever *bent* by the cursor and always heals back to its untouched shape.
+export const OFFSET_UPDATE = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
 uniform sampler2D uVelocity;
-uniform sampler2D uSource;
+uniform sampler2D uOffset;
 uniform vec2 uTexelSize;   // texel size of the velocity field
 uniform float uDt;
+uniform float uDecay;
+void main() {
+  vec2 v = texture(uVelocity, vUv).xy;
+  vec2 back = vUv - uDt * v * uTexelSize;
+  vec2 off = texture(uOffset, back).xy;
+  off += v * uTexelSize * uDt;
+  off *= exp(-uDecay * uDt);
+  float len = length(off);
+  if (len > 0.25) off *= 0.25 / len;
+  outColor = vec4(off, 0.0, 1.0);
+}
+`;
+
+// The cloud, recomputed every frame: base nebula sampled through the bent
+// coordinates. Divergence of the displacement drives a density response —
+// stretched gas thins (cleared path), compressed gas piles up and brightens.
+export const CLOUD = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uOffset;
+uniform vec2 uOffTexel;
 uniform float uAspect;
 uniform float uTime;
-uniform float uRelaxRate;  // 1/s; set huge on the first frame to snap to base
 ${NOISE_GLSL}
 void main() {
-  vec2 vel = texture(uVelocity, vUv).xy;
-  // Turbulent advection: perturb the backtrace direction with noise scaled by
-  // local speed, so moving gas develops ragged, billowy edges instead of the
-  // smooth round front a clean semi-Lagrangian trace produces. Still gas is untouched.
-  float speed = length(vel);
-  vec2 np = vUv * vec2(uAspect, 1.0) * 7.0;
-  vec2 turb = vec2(fbm(np + uTime * 0.05), fbm(np + vec2(5.2, 1.3) - uTime * 0.04)) - 0.5;
-  vec2 coord = vUv - uDt * (vel + turb * speed * 1.4) * uTexelSize;
-  vec4 dye = texture(uSource, coord);
-  vec4 base = baseNebula(vUv, uAspect, uTime);
-  float k = 1.0 - exp(-uRelaxRate * uDt);
-  outColor = mix(dye, base, k);
+  vec2 off = texture(uOffset, vUv).xy;
+  float dR = texture(uOffset, vUv + vec2(uOffTexel.x, 0.0)).x;
+  float dL = texture(uOffset, vUv - vec2(uOffTexel.x, 0.0)).x;
+  float dT = texture(uOffset, vUv + vec2(0.0, uOffTexel.y)).y;
+  float dB = texture(uOffset, vUv - vec2(0.0, uOffTexel.y)).y;
+  float div = 0.5 * ((dR - dL) / uOffTexel.x + (dT - dB) / uOffTexel.y);
+  float squeeze = exp(-clamp(div, -3.0, 3.0) * 0.5);
+  vec4 base = baseNebula(vUv - off, uAspect, uTime);
+  outColor = vec4(base.rgb * squeeze, base.a * squeeze);
 }
 `;
 
@@ -152,13 +171,16 @@ out vec4 outColor;
 uniform sampler2D uTarget;
 uniform float uAspect;
 uniform vec2 uPoint;
-uniform vec3 uColor;
+uniform vec2 uDir;
 uniform float uRadius;
+uniform float uRadial;  // 0 = directional push, 1 = radial shove away from uPoint
 void main() {
   vec2 p = vUv - uPoint;
   p.x *= uAspect;
-  vec3 splat = exp(-dot(p, p) / uRadius) * uColor;
-  outColor = vec4(texture(uTarget, vUv).xyz + splat, 1.0);
+  float g = exp(-dot(p, p) / uRadius);
+  vec2 radialDir = p / (length(p) + 1e-4);
+  vec2 force = mix(uDir, radialDir * length(uDir), uRadial);
+  outColor = vec4(texture(uTarget, vUv).xy + force * g, 0.0, 1.0);
 }
 `;
 
