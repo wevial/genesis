@@ -348,7 +348,10 @@ vec3 brightStars(vec2 uv, float glow) {
   vec2 id = floor(g);
   vec2 f = fract(g);
   float rnd = hash12(id);
-  if (rnd > 0.12) return vec3(0.0);
+  // The grid is world-space, so a narrow portrait screen holds fewer cells —
+  // raise the spawn odds as the aspect narrows to keep the count feeling even.
+  float spawn = 0.12 / clamp(uAspect, 0.45, 1.0);
+  if (rnd > spawn) return vec3(0.0);
   vec2 pos = vec2(hash12(id + 17.1), hash12(id + 31.7)) * 0.5 + 0.25;
   float r = length(f - pos);
   float w = mix(500.0, 2200.0, hash12(id + 23.7)); // core sharpness varies star to star
