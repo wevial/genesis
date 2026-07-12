@@ -21,9 +21,14 @@ const CONFIG = {
 };
 
 export class FluidSim {
-  constructor(gl) {
+  constructor(gl, tier) {
     this.gl = gl;
-    this.config = CONFIG;
+    this.config = { ...CONFIG };
+    if (tier) {
+      this.config.simResolution = tier.sim;
+      this.config.cloudResolution = tier.cloud;
+      this.config.pressureIterations = tier.iters;
+    }
     this.blit = makeBlit(gl);
     this.time = 0;
 
@@ -72,6 +77,23 @@ export class FluidSim {
     this.divergence = createFBO(gl, sim.w, sim.h, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
     this.offset = createDoubleFBO(gl, off.w, off.h, gl.RG16F, gl.RG, gl.HALF_FLOAT, gl.LINEAR);
     this.cloud = createFBO(gl, cloudRes.w, cloudRes.h, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR);
+    this.cloudDirty = true; // freshly-created cloud FBO is transparent black
+  }
+
+  // Zero out all dynamic state. Called when the nebula scrolls out of view:
+  // the sim stops stepping there, and without this, stale cursor deformation
+  // would be frozen in place and pop back on re-entry. Pressure must be
+  // cleared too — the Jacobi solve warm-starts from it, and a stale gradient
+  // would transiently regenerate the velocity we just cleared.
+  clearDynamics() {
+    const gl = this.gl;
+    gl.clearColor(0, 0, 0, 0);
+    for (const d of [this.velocity, this.offset, this.pressure]) {
+      for (const f of [d.read, d.write]) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, f.fbo);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+    }
   }
 
   // Inject force at a point. field: 'velocity' (directional momentum) or
@@ -141,13 +163,24 @@ export class FluidSim {
     blit(offset.write);
     offset.swap();
 
-    // Render the cloud through the bent coordinates.
-    pr.cloud.use();
-    gl.uniform1i(pr.cloud.uniforms.uOffset, offset.read.attach(0));
-    gl.uniform2f(pr.cloud.uniforms.uOffTexel, offset.texelSizeX, offset.texelSizeY);
-    gl.uniform1f(pr.cloud.uniforms.uAspect, this.aspect);
-    gl.uniform1f(pr.cloud.uniforms.uTime, this.time);
-    gl.uniform1f(pr.cloud.uniforms.uScroll, scroll);
-    blit(cloud);
+    this.renderCloud(scroll);
+  }
+
+  // Render the cloud through the bent coordinates. Separate from step() so a
+  // reduced-motion page can keep a frozen cloud in sync with scroll without
+  // running the sim.
+  renderCloud(scroll) {
+    const gl = this.gl;
+    const p = this.programs.cloud;
+    gl.disable(gl.BLEND);
+    p.use();
+    gl.uniform1i(p.uniforms.uOffset, this.offset.read.attach(0));
+    gl.uniform2f(p.uniforms.uOffTexel, this.offset.texelSizeX, this.offset.texelSizeY);
+    gl.uniform1f(p.uniforms.uAspect, this.aspect);
+    gl.uniform1f(p.uniforms.uTime, this.time);
+    gl.uniform1f(p.uniforms.uScroll, scroll);
+    this.blit(this.cloud);
+    this.cloudScroll = scroll;
+    this.cloudDirty = false;
   }
 }
