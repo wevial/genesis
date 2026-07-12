@@ -7,13 +7,16 @@ Portfolio landing page background: a scroll journey from deep space down into a 
 
 ## Run
 
-Any static server from the repo root, e.g.:
-
 ```sh
-python3 -m http.server 8631
+python3 serve.py        # http://127.0.0.1:8631
 ```
 
-ES modules require http(s); `file://` won't work.
+`serve.py` is a static server that sends `Cache-Control: no-cache` — a bare
+`python3 -m http.server` lets the browser mix stale and fresh ES modules
+after edits. ES modules require http(s); `file://` won't work.
+
+Debug hooks: `?tier=0..4` locks a quality tier (4 = static CSS fallback),
+`?perf` logs governor decisions to the console.
 
 ## Architecture
 
