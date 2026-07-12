@@ -109,7 +109,11 @@ const fmt = (d: Date) =>
     --mono: 'SF Mono', Menlo, Consolas, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: auto; }
+  /* proximity, not mandatory: sections settle into place when you stop near
+     them, but the long open-sky stretches stay freely scrollable */
+  html { scroll-behavior: auto; scroll-snap-type: y proximity; }
+  #hero { scroll-snap-align: start; }
+  #projects, #writing, #contact { scroll-snap-align: center; }
   body {
     background: #050113; /* pre-GL paint, matches space top of gradient */
     overflow-x: hidden;

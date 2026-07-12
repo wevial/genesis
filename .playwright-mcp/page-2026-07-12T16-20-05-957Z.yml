@@ -1,0 +1,61 @@
+- main [ref=f11e3]:
+  - generic [ref=f11e4]:
+    - generic [ref=f11e5]:
+      - heading "// Ko Vial" [level=1] [ref=f11e6]
+      - paragraph [ref=f11e7]:
+        - text: Full-stack engineer, eight years in.Founding engineer at
+        - link "Relos" [ref=f11e8] [cursor=pointer]:
+          - /url: https://relos.com
+        - text: .
+      - generic [ref=f11e9]: "LAT 37.77 · LON −122.42 · SECTOR: NEBULA"
+    - paragraph [ref=f11e10]: scroll — it gets brighter ↓
+  - generic [ref=f11e12]:
+    - heading "Projects ───────────" [level=2] [ref=f11e13]
+    - generic [ref=f11e14]:
+      - img "Projects rendered as a constellation" [ref=f11e15]:
+        - generic [ref=f11e23]:
+          - 'button "Holophyte: Mission control for coding-agent sessions — launch, steer, and review agent runs as cards on a board." [ref=f11e24]':
+            - generic [ref=f11e27] [cursor=pointer]: Holophyte
+          - 'button "Bramble: Two AI agents debate to co-author a spec, with you steering. A TUI over the claude and codex CLIs." [ref=f11e28]':
+            - generic [ref=f11e31] [cursor=pointer]: Bramble
+          - 'button "Genesis: This site. A WebGL nebula you can push your cursor through, scrolling from deep space down to daylight." [ref=f11e32]':
+            - generic [ref=f11e35] [cursor=pointer]: Genesis
+          - 'button "Orblette: A regular-expression engine built on the Thompson–McNaughton–Yamada construction." [ref=f11e36]':
+            - generic [ref=f11e39] [cursor=pointer]: Orblette
+          - 'button "Vespoid: Personal job-search tracker — scrapes tailored listings and tracks every application." [ref=f11e40]':
+            - generic [ref=f11e43] [cursor=pointer]: Vespoid
+          - 'button "Downpour: A BitTorrent client, from the wire protocol up." [ref=f11e44]':
+            - generic [ref=f11e47] [cursor=pointer]: Downpour
+      - generic [ref=f11e48]:
+        - heading "Genesis" [level=3] [ref=f11e49]
+        - paragraph [ref=f11e50]: This site. A WebGL nebula you can push your cursor through, scrolling from deep space down to daylight.
+        - paragraph [ref=f11e51]:
+          - text: WebGL2 · Astro ·
+          - link "view →" [ref=f11e52] [cursor=pointer]:
+            - /url: https://github.com/wevial/genesis
+  - generic [ref=f11e54]:
+    - heading "Writing ───────────" [level=2] [ref=f11e55]
+    - list [ref=f11e56]:
+      - listitem [ref=f11e57]:
+        - text: ">"
+        - link "Hello, world" [ref=f11e58] [cursor=pointer]:
+          - /url: /blog/hello-world/
+        - time [ref=f11e59]: Jul 2026
+    - paragraph [ref=f11e60]:
+      - link "all posts →" [ref=f11e61] [cursor=pointer]:
+        - /url: /blog/
+  - generic [ref=f11e63]:
+    - heading "Elsewhere ───────────" [level=2] [ref=f11e64]
+    - generic [ref=f11e65]:
+      - generic [ref=f11e66]:
+        - link "ko@relos.com" [ref=f11e67] [cursor=pointer]:
+          - /url: mailto:ko@relos.com
+        - link "github/wevial" [ref=f11e68] [cursor=pointer]:
+          - /url: https://github.com/wevial
+      - generic [ref=f11e69]:
+        - generic [ref=f11e70]:
+          - generic [ref=f11e71]: now
+          - generic [ref=f11e72]: Founding engineer, Relos
+        - generic [ref=f11e73]:
+          - generic [ref=f11e74]: before
+          - generic [ref=f11e75]: Eight years of full-stack work.
