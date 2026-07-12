@@ -115,8 +115,9 @@ uniform sampler2D uSource;
 uniform vec2 uTexelSize;   // texel size of the velocity field
 uniform float uDt;
 uniform float uDissipation;
+uniform vec2 uShift;       // this frame's scroll motion — fields ride with the cloud
 void main() {
-  vec2 coord = vUv - uDt * texture(uVelocity, vUv).xy * uTexelSize;
+  vec2 coord = vUv - uDt * texture(uVelocity, vUv).xy * uTexelSize - uShift;
   outColor = texture(uSource, coord) / (1.0 + uDissipation * uDt);
 }
 `;
@@ -133,9 +134,10 @@ uniform sampler2D uOffset;
 uniform vec2 uTexelSize;   // texel size of the velocity field
 uniform float uDt;
 uniform float uDecay;
+uniform vec2 uShift;       // this frame's scroll motion — deformations ride with the cloud
 void main() {
   vec2 v = texture(uVelocity, vUv).xy;
-  vec2 back = vUv - uDt * v * uTexelSize;
+  vec2 back = vUv - uDt * v * uTexelSize - uShift;
   vec2 off = texture(uOffset, back).xy;
   off += v * uTexelSize * uDt;
   off *= exp(-uDecay * uDt);
@@ -169,9 +171,8 @@ void main() {
   // Scroll shifts the cloud's *world* coordinates — the procedural field is
   // unbounded, so the nebula slides up with the stars and fresh (or, past the
   // territory boundary, empty) sky enters from below with no texture edge.
-  // 3x scroll speed: the nearest parallax layer, and the territory clears the
-  // viewport by ~half scroll.
-  vec4 base = baseNebula(vUv - off - vec2(0.0, uScroll * 3.0), uAspect, uTime);
+  // uScroll arrives pre-multiplied by the world speed (see fluid.js).
+  vec4 base = baseNebula(vUv - off - vec2(0.0, uScroll), uAspect, uTime);
   outColor = vec4(base.rgb * squeeze, base.a * squeeze);
 }
 `;

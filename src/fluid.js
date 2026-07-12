@@ -10,6 +10,12 @@ import {
   DIVERGENCE, PRESSURE, GRADIENT_SUBTRACT,
 } from './shaders.js';
 
+// How fast the cloud's world coordinates move per unit of scroll (viewport
+// heights over the full page). The nearest parallax layer; its territory
+// clears the viewport by ~half scroll. The cloud pass and the field-shift
+// logic below must share this value.
+const WORLD_SPEED = 3.0;
+
 const CONFIG = {
   simResolution: 224,        // velocity/pressure grid (short edge)
   offsetResolution: 512,     // displacement field (short edge)
@@ -116,8 +122,14 @@ export class FluidSim {
 
   step(dt, scroll = 0) {
     const gl = this.gl;
-    const { programs: pr, velocity, pressure, divergence, offset, cloud, blit, config } = this;
+    const { programs: pr, velocity, pressure, divergence, offset, blit, config } = this;
     this.time += dt;
+
+    // Deformations belong to the cloud, not the viewport: shift the fields by
+    // this frame's world-space scroll motion so wakes ride with the gas.
+    const world = scroll * WORLD_SPEED;
+    const shiftY = world - (this.lastWorld ?? world);
+    this.lastWorld = world;
 
     gl.disable(gl.BLEND);
 
@@ -150,6 +162,7 @@ export class FluidSim {
     gl.uniform2f(pr.advection.uniforms.uTexelSize, velocity.texelSizeX, velocity.texelSizeY);
     gl.uniform1f(pr.advection.uniforms.uDt, dt);
     gl.uniform1f(pr.advection.uniforms.uDissipation, config.velocityDissipation);
+    gl.uniform2f(pr.advection.uniforms.uShift, 0, shiftY);
     blit(velocity.write);
     velocity.swap();
 
@@ -160,6 +173,7 @@ export class FluidSim {
     gl.uniform2f(pr.offsetUpdate.uniforms.uTexelSize, velocity.texelSizeX, velocity.texelSizeY);
     gl.uniform1f(pr.offsetUpdate.uniforms.uDt, dt);
     gl.uniform1f(pr.offsetUpdate.uniforms.uDecay, config.offsetDecay);
+    gl.uniform2f(pr.offsetUpdate.uniforms.uShift, 0, shiftY);
     blit(offset.write);
     offset.swap();
 
@@ -178,7 +192,7 @@ export class FluidSim {
     gl.uniform2f(p.uniforms.uOffTexel, this.offset.texelSizeX, this.offset.texelSizeY);
     gl.uniform1f(p.uniforms.uAspect, this.aspect);
     gl.uniform1f(p.uniforms.uTime, this.time);
-    gl.uniform1f(p.uniforms.uScroll, scroll);
+    gl.uniform1f(p.uniforms.uScroll, scroll * WORLD_SPEED);
     this.blit(this.cloud);
     this.cloudScroll = scroll;
     this.cloudDirty = false;
