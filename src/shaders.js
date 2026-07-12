@@ -150,6 +150,7 @@ uniform sampler2D uOffset;
 uniform vec2 uOffTexel;
 uniform float uAspect;
 uniform float uTime;
+uniform float uScroll;
 ${NOISE_GLSL}
 void main() {
   vec2 off = texture(uOffset, vUv).xy;
@@ -159,7 +160,10 @@ void main() {
   float dB = texture(uOffset, vUv - vec2(0.0, uOffTexel.y)).y;
   float div = 0.5 * ((dR - dL) / uOffTexel.x + (dT - dB) / uOffTexel.y);
   float squeeze = exp(-clamp(div, -3.0, 3.0) * 0.5);
-  vec4 base = baseNebula(vUv - off, uAspect, uTime);
+  // Scroll shifts the cloud's *world* coordinates — the procedural field is
+  // unbounded, so the nebula slides up with the stars and fresh cloud enters
+  // from below, with no texture edge to clamp against.
+  vec4 base = baseNebula(vUv - off - vec2(0.0, uScroll * 0.5), uAspect, uTime);
   outColor = vec4(base.rgb * squeeze, base.a * squeeze);
 }
 `;

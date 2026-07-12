@@ -105,7 +105,7 @@ function start(gl) {
       pointer.dy = 0;
     }
 
-    fluid.step(dt);
+    fluid.step(dt, scrollSmooth);
 
     composite.use();
     gl.uniform1i(composite.uniforms.uDye, fluid.cloud.attach(0));

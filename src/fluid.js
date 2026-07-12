@@ -92,7 +92,7 @@ export class FluidSim {
     target.swap();
   }
 
-  step(dt) {
+  step(dt, scroll = 0) {
     const gl = this.gl;
     const { programs: pr, velocity, pressure, divergence, offset, cloud, blit, config } = this;
     this.time += dt;
@@ -147,6 +147,7 @@ export class FluidSim {
     gl.uniform2f(pr.cloud.uniforms.uOffTexel, offset.texelSizeX, offset.texelSizeY);
     gl.uniform1f(pr.cloud.uniforms.uAspect, this.aspect);
     gl.uniform1f(pr.cloud.uniforms.uTime, this.time);
+    gl.uniform1f(pr.cloud.uniforms.uScroll, scroll);
     blit(cloud);
   }
 }
