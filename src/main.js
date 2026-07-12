@@ -91,7 +91,7 @@ function start(gl) {
     // plus a soft directional drag through the fluid sim (the wake).
     // Only while the nebula is on screen (it fades out by ~half scroll).
     const speed = Math.hypot(pointer.dx, pointer.dy);
-    if (pointer.active && speed > 0 && scrollSmooth < 0.55) {
+    if (pointer.active && speed > 0 && scrollSmooth < 0.40) {
       const part = Math.min(speed * 2.8, 0.09);
       for (let i = 0; i < 3; i++) {
         const jx = (Math.random() - 0.5) * 0.016;

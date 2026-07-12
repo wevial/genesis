@@ -21,19 +21,19 @@
     display: block;
     touch-action: pan-y; /* keep vertical scroll on touch, we only read pointer for splats */
   }
-  #scroll-space { height: 500vh; }
+  #scroll-space { height: 650vh; }
   /* Static CSS fallback when WebGL2/float rendering is unavailable */
   body.no-gl #gl { display: none; }
   body.no-gl {
     background: linear-gradient(
       to bottom,
-      #050113 0%, #0a0824 12%,
-      #0a1128 30%, #16294f 45%,
-      #2b3a67 58%, #b96a8c 68%, #ff9e6b 74%,
-      #6ab7f0 88%, #d9f1fe 100%
+      #050113 0%, #0a0824 10%,
+      #0a1128 26%, #16294f 48%,
+      #2b3a67 62%, #b96a8c 72%, #ff9e6b 78%,
+      #6ab7f0 90%, #d9f1fe 100%
     );
     background-attachment: scroll;
-    background-size: 100% 500vh;
+    background-size: 100% 650vh;
   }
 </style>
 </head>

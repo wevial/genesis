@@ -312,7 +312,7 @@ const vec3 SKY_BOT[4] = vec3[4](
   vec3(1.000, 0.620, 0.380),  // dawn: horizon orange
   vec3(0.851, 0.945, 0.996)   // day: pale horizon
 );
-const float SKY_STOPS[4] = float[4](0.0, 0.42, 0.70, 1.0);
+const float SKY_STOPS[4] = float[4](0.0, 0.36, 0.74, 1.0);
 
 vec3 skyColor(float y, float s) {
   int i = 0;
@@ -374,12 +374,12 @@ void main() {
   // Sample the nebula first: local gas density gates the bright-star glow.
   // The nebula stays in place and dissolves; parallax-shifting it drags the
   // dye texture's clamped edge across the screen as a visible line.
-  float nebFade = 1.0 - smoothstep(0.16, 0.46, s);
+  float nebFade = 1.0 - smoothstep(0.10, 0.32, s);
   vec4 dye = vec4(0.0);
   if (nebFade > 0.0) dye = texture(uDye, vUv);
   float gasDen = clamp(dot(dye.rgb, vec3(0.6)) * nebFade, 0.0, 1.0);
 
-  float starFade = 1.0 - smoothstep(0.55, 0.82, s);
+  float starFade = 1.0 - smoothstep(0.62, 0.86, s);
   if (starFade > 0.0) {
     float stars = 0.0;
     stars += starLayer(suv - vec2(0.0, s * 0.45), 170.0, 0.28) * 0.30;  // dust of tiny stars
