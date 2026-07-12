@@ -77,6 +77,12 @@ vec4 baseNebula(vec2 uv, float aspect, float time) {
   float fil = ridge(p * 3.1 + drift * 1.4 + warp * 1.6);
   mass += (fil - 0.55) * 0.16;
 
+  // The nebula's territory ends at a world altitude below the first screen.
+  // Reducing MASS (not alpha) means clouds near the boundary shrink and break
+  // into smaller complete puffs — no cloud shape is ever sliced by a line.
+  float band = smoothstep(-0.45, -0.05, uv.y);
+  mass -= (1.0 - band) * 0.6;
+
   // High threshold + power: dense glowing cores, wispy edges, real dark sky between clouds.
   float density = pow(smoothstep(0.48, 0.95, mass), 1.6);
   density *= 0.4 + 1.1 * fil * fil;
@@ -161,9 +167,11 @@ void main() {
   float div = 0.5 * ((dR - dL) / uOffTexel.x + (dT - dB) / uOffTexel.y);
   float squeeze = exp(-clamp(div, -3.0, 3.0) * 0.5);
   // Scroll shifts the cloud's *world* coordinates — the procedural field is
-  // unbounded, so the nebula slides up with the stars and fresh cloud enters
-  // from below, with no texture edge to clamp against.
-  vec4 base = baseNebula(vUv - off - vec2(0.0, uScroll * 0.5), uAspect, uTime);
+  // unbounded, so the nebula slides up with the stars and fresh (or, past the
+  // territory boundary, empty) sky enters from below with no texture edge.
+  // 3x scroll speed: the nearest parallax layer, and the territory clears the
+  // viewport by ~half scroll.
+  vec4 base = baseNebula(vUv - off - vec2(0.0, uScroll * 3.0), uAspect, uTime);
   outColor = vec4(base.rgb * squeeze, base.a * squeeze);
 }
 `;
@@ -374,7 +382,10 @@ void main() {
   // Sample the nebula first: local gas density gates the bright-star glow.
   // The nebula stays in place and dissolves; parallax-shifting it drags the
   // dye texture's clamped edge across the screen as a visible line.
-  float nebFade = 1.0 - smoothstep(0.10, 0.32, s);
+  // The nebula ends by scrolling past its world-space territory, not by
+  // fading. This late fade only lets the shader skip cloud work once the
+  // territory has already left the viewport — it is never visible.
+  float nebFade = 1.0 - smoothstep(0.50, 0.65, s);
   vec4 dye = vec4(0.0);
   if (nebFade > 0.0) dye = texture(uDye, vUv);
   float gasDen = clamp(dot(dye.rgb, vec3(0.6)) * nebFade, 0.0, 1.0);
