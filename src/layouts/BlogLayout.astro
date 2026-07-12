@@ -1,0 +1,79 @@
+---
+// Minimal dark shell for blog pages. Placeholder styling — the real design
+// lands with the UI phase alongside the landing page's content layer.
+interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌌</text></svg>"
+    />
+  </head>
+  <body>
+    <main>
+      <nav><a href="/">← home</a> · <a href="/blog">blog</a></nav>
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: dark;
+  }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    background: #0a0820;
+    color: #e6e1f4;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    line-height: 1.65;
+  }
+  main {
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 6rem;
+  }
+  nav {
+    margin-bottom: 3rem;
+    font-size: 0.9rem;
+  }
+  a {
+    color: #b79bf5;
+  }
+  h1,
+  h2,
+  h3 {
+    line-height: 1.25;
+    margin: 2rem 0 0.75rem;
+  }
+  p,
+  ul,
+  ol,
+  pre {
+    margin: 0.75rem 0;
+  }
+  pre {
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+  time {
+    color: #8f87ad;
+    font-size: 0.85rem;
+  }
+</style>

@@ -1,0 +1,22 @@
+{
+  "name": "genesis",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "deploy": "astro build && npx wrangler deploy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wevial/genesis.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/wevial/genesis/issues"
+  },
+  "homepage": "https://github.com/wevial/genesis#readme",
+  "dependencies": {
+    "astro": "^7.0.7"
+  }
+}
