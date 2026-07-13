@@ -303,29 +303,31 @@ uniform float uAspect;
 ${NOISE_GLSL}
 
 // --- Sky gradient keyframes: (top, mid, bottom) per scroll stop ---
-// space -> night -> dawn -> day -> fog (the shore photo fades in over the fog).
-// Fog values are sampled from the top of the shore photograph so the
-// crossfade between shader sky and photo is seamless.
+// space -> night -> dawn -> day -> fog (the shore photo scrolls in over the fog).
+// Fog values are sampled from the top of the shore photograph, then inverse
+// tone-mapped (c = t / (1 - 0.15t)) so that after the output curve below they
+// land exactly on the photo's pixel values — otherwise the shader sky renders
+// darker than the photo and the seam shows as a band.
 const vec3 SKY_TOP[5] = vec3[5](
   vec3(0.012, 0.004, 0.055),  // space: near-black violet
   vec3(0.016, 0.043, 0.110),  // night: deep blue
   vec3(0.118, 0.157, 0.369),  // dawn: indigo
   vec3(0.353, 0.647, 0.925),  // day: sky blue
-  vec3(0.827, 0.867, 0.894)   // fog: pale cool gray
+  vec3(0.944, 0.997, 1.032)   // fog: pale cool gray (pre-tone-map)
 );
 const vec3 SKY_MID[5] = vec3[5](
   vec3(0.024, 0.010, 0.078),
   vec3(0.043, 0.086, 0.180),
   vec3(0.557, 0.337, 0.482),  // dawn: dusty rose
   vec3(0.565, 0.792, 0.965),
-  vec3(0.792, 0.831, 0.859)
+  vec3(0.898, 0.949, 0.988)
 );
 const vec3 SKY_BOT[5] = vec3[5](
   vec3(0.043, 0.024, 0.110),
   vec3(0.078, 0.145, 0.278),
   vec3(1.000, 0.620, 0.380),  // dawn: horizon orange
   vec3(0.851, 0.945, 0.996),  // day: pale horizon
-  vec3(0.729, 0.769, 0.796)   // fog: dimmer toward the ground
+  vec3(0.884, 0.933, 0.973)   // fog: near-uniform, barely dimmer below
 );
 const float SKY_STOPS[5] = float[5](0.0, 0.275, 0.565, 0.764, 0.95);
 
@@ -345,6 +347,29 @@ vec3 skyColor(float y, float s) {
   // at a midpoint leaves a flat seam that reads as a dark band.
   vec3 c = mix(bot, mid, smoothstep(0.0, 0.60, y));
   return mix(c, top, smoothstep(0.25, 1.0, y));
+}
+
+// --- Fog clouds: the day sky's answer to the nebula. Fluffy, sparse gray
+// puffs (no ridged filaments, wide soft threshold) that roll sideways on
+// their own and slide up with scroll at a mid-distance parallax, thickening
+// until they merge into the uniform fog the shore emerges from. Purely
+// composited — the cursor never stirs them. Tint is the fog keyframe color,
+// so a fully merged cloud deck IS the fog sky. Returns color in rgb, cover
+// in a.
+const vec3 FOG_TINT = vec3(0.944, 0.997, 1.032); // pre-tone-map photo gray
+
+vec4 fogClouds(vec2 suv, float y, float s, float time) {
+  float appear = smoothstep(0.63, 0.80, s);  // sparse puffs during late dawn
+  float merge = smoothstep(0.80, 0.94, s);   // gaps close approaching the shore
+  if (appear <= 0.0) return vec4(0.0);
+  vec2 p = suv * 2.2 + vec2(time * 0.04, -s * 4.4);
+  vec2 warp = vec2(fbm(p + vec2(3.1, 1.7)), fbm(p + vec2(7.7, 5.3))) - 0.5;
+  float m = fbm(p + warp * 2.0);
+  m += (0.40 - y) * 0.18;                    // the deck is thicker below you
+  float d = smoothstep(mix(0.56, 0.32, merge), mix(0.76, 0.50, merge), m) * appear;
+  d = max(d, merge * merge);                 // by the shore, no gaps remain
+  vec3 col = FOG_TINT * (0.94 + 0.16 * (m - 0.5));
+  return vec4(col, d);
 }
 
 // --- Bright stars: dots with varied size; the glow halo only shows where
@@ -421,6 +446,11 @@ void main() {
     vec3 gas = 1.0 - exp(-dye.rgb * 1.7);
     col += gas * nebFade;
   }
+
+  // Fog clouds roll over everything below the night sky; they scatter a
+  // little of the sky behind them so they sit in the scene, not on it.
+  vec4 fog = fogClouds(suv, vUv.y, s, uTime);
+  if (fog.a > 0.0) col = mix(col, mix(col, fog.rgb, 0.78), fog.a);
 
   // Gentle filmic-ish curve + dither to prevent gradient banding.
   col = col / (1.0 + col * 0.15);
