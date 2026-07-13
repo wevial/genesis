@@ -1,5 +1,5 @@
 ---
-title: Hello, world
+title: AI is Accessibility
 date: 2026-07-12
 description: First post — placeholder while the blog takes shape.
 ---
