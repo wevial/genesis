@@ -375,7 +375,7 @@ vec4 fogClouds(vec2 suv, float y, float s, float time) {
   // At the shore the photograph carries the fog itself, so the pass thins to
   // drifting surface mist: full-range alpha there would white the beach out
   // where the deck is dense and punch dark photo-colored holes where it gaps.
-  d = mix(min(d, 0.94), 0.16 + 0.30 * d, merge);
+  d = mix(min(d, 0.94), 0.08 + 0.24 * d, merge);
   vec3 col = FOG_TINT * (0.94 + 0.16 * (m - 0.5));
   return vec4(col, d);
 }
@@ -461,6 +461,8 @@ void main() {
   // tone-mapped so the output curve reproduces the photo's exact pixels.
   // (Sampled in uniform control flow only — a per-pixel branch here breaks
   // the implicit derivatives that pick the mipmap level and smears ghosts.)
+  float photoA = 0.0; // how much photo is under this pixel
+  float photoV = 0.0; // vertical position within the photo (0 top, 1 bottom)
   if (uPhotoReady > 0.0 && uShoreRect.y > 0.0) {
     float syTop = 1.0 - vUv.y;              // 0 at screen top, 1 at bottom
     float ly = syTop - uShoreRect.x;        // position within the section
@@ -478,12 +480,17 @@ void main() {
     // samples taken up there never show.
     float a = smoothstep(uShoreRect.x, uShoreRect.x + 0.22 * regH, syTop);
     col = mix(col, photo, a);
+    photoA = a;
+    photoV = puv.y;
   }
 
   // Fog clouds roll over everything below the night sky — the beach
   // included; they scatter a little of what's behind them so they sit in
   // the scene, not on it.
   vec4 fog = fogClouds(suv, vUv.y, s, uTime);
+  // Over the beach the mist hugs the treeline (mid-photo) and fades off the
+  // near sand — fog that never reaches your feet reads as rolling far away.
+  fog.a *= mix(1.0, 1.0 - smoothstep(0.60, 0.82, photoV), photoA);
   if (fog.a > 0.0) col = mix(col, mix(col, fog.rgb, 0.78), fog.a);
 
   // Gentle filmic-ish curve + dither to prevent gradient banding.
