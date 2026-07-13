@@ -5,8 +5,13 @@
 // contact against the dawn, and the journey ends on a fogged-in shore —
 // a photograph that scrolls up into view out of the shader's fog keyframe.
 import { getCollection } from 'astro:content';
-import { Image } from 'astro:assets';
+import { Image, getImage } from 'astro:assets';
 import shorePhoto from '../assets/shore-fog.jpg';
+
+// A GL-sized copy for the composite shader, which draws the photo itself so
+// fog can roll over the beach. The DOM <Image> below is the pre-load and
+// no-WebGL fallback.
+const glShore = await getImage({ src: shorePhoto, width: 2048, format: 'webp' });
 
 const posts = (await getCollection('blog', ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
@@ -31,7 +36,7 @@ const fmt = (d: Date) =>
     />
   </head>
   <body>
-    <canvas id="gl"></canvas>
+    <canvas id="gl" data-shore-src={glShore.src}></canvas>
 
     <main>
       <section id="hero">
@@ -167,6 +172,8 @@ const fmt = (d: Date) =>
   }
   #shore .landfall { position: relative; color: rgba(222, 234, 236, 0.8); margin: 0; }
   #shore .credit { position: relative; color: rgba(200, 214, 216, 0.5); margin: 0.5rem 0 0; }
+  /* Once the GL copy of the photo is live, the DOM one bows out. */
+  body.gl-photo #shore-photo { visibility: hidden; }
 
   .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.9s ease, transform 0.9s ease; }
   .reveal.in { opacity: 1; transform: none; }

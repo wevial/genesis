@@ -300,6 +300,10 @@ uniform sampler2D uDye;
 uniform float uScroll;      // 0 = deep space, 1 = full day
 uniform float uTime;
 uniform float uAspect;
+uniform sampler2D uPhoto;   // the shore photograph
+uniform float uPhotoReady;  // 0 until the texture has loaded
+uniform float uPhotoAspect; // image width / height
+uniform vec2 uShoreRect;    // shore section (top, height), viewport-height units from screen top
 ${NOISE_GLSL}
 
 // --- Sky gradient keyframes: (top, mid, bottom) per scroll stop ---
@@ -366,8 +370,12 @@ vec4 fogClouds(vec2 suv, float y, float s, float time) {
   vec2 warp = vec2(fbm(p + vec2(3.1, 1.7)), fbm(p + vec2(7.7, 5.3))) - 0.5;
   float m = fbm(p + warp * 2.0);
   m += (0.40 - y) * 0.18;                    // the deck is thicker below you
-  float d = smoothstep(mix(0.56, 0.32, merge), mix(0.76, 0.50, merge), m) * appear;
-  d = max(d, merge * merge);                 // by the shore, no gaps remain
+  float d = smoothstep(mix(0.56, 0.30, merge), mix(0.76, 0.48, merge), m) * appear;
+  d = max(d, merge * 0.22);  // a thin ambient veil ties the sky and beach together
+  // At the shore the photograph carries the fog itself, so the pass thins to
+  // drifting surface mist: full-range alpha there would white the beach out
+  // where the deck is dense and punch dark photo-colored holes where it gaps.
+  d = mix(min(d, 0.94), 0.16 + 0.30 * d, merge);
   vec3 col = FOG_TINT * (0.94 + 0.16 * (m - 0.5));
   return vec4(col, d);
 }
@@ -447,8 +455,34 @@ void main() {
     col += gas * nebFade;
   }
 
-  // Fog clouds roll over everything below the night sky; they scatter a
-  // little of the sky behind them so they sit in the scene, not on it.
+  // The shore photograph, drawn in-shader and cover-fit to the shore
+  // section's live DOM rect so the fog pass can roll mist over the beach.
+  // The top edge feathers into the fog sky; the color is inverse
+  // tone-mapped so the output curve reproduces the photo's exact pixels.
+  // (Sampled in uniform control flow only — a per-pixel branch here breaks
+  // the implicit derivatives that pick the mipmap level and smears ghosts.)
+  if (uPhotoReady > 0.0 && uShoreRect.y > 0.0) {
+    float syTop = 1.0 - vUv.y;              // 0 at screen top, 1 at bottom
+    float ly = syTop - uShoreRect.x;        // position within the section
+    float regW = uAspect;                   // section size in viewport-height units
+    float regH = uShoreRect.y;
+    float imgH = max(regH, regW / uPhotoAspect);  // cover fit
+    float imgW = imgH * uPhotoAspect;
+    vec2 puv = vec2(
+      (vUv.x * uAspect - (regW - imgW) * 0.5) / imgW,
+      (ly - (regH - imgH) * 0.65) / imgH    // object-position: center 65%
+    );
+    vec3 photo = texture(uPhoto, puv).rgb;
+    photo = photo / (1.0 - 0.15 * photo);   // pre-compensate the tone curve
+    // Feathered top edge; zero above the section, so the clamped-out-of-range
+    // samples taken up there never show.
+    float a = smoothstep(uShoreRect.x, uShoreRect.x + 0.22 * regH, syTop);
+    col = mix(col, photo, a);
+  }
+
+  // Fog clouds roll over everything below the night sky — the beach
+  // included; they scatter a little of what's behind them so they sit in
+  // the scene, not on it.
   vec4 fog = fogClouds(suv, vUv.y, s, uTime);
   if (fog.a > 0.0) col = mix(col, mix(col, fog.rgb, 0.78), fog.a);
 

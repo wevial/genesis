@@ -70,6 +70,31 @@ function start(gl) {
 
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
+  // The shore photograph is composited in-shader so fog can roll over the
+  // beach. The DOM <img> shows until the texture is ready (and forever on
+  // the no-gl path), then hides — the GL copy is drawn at the same rect.
+  const shoreEl = document.getElementById('shore');
+  const photoTex = gl.createTexture();
+  let photoReady = 0;
+  let photoAspect = 1;
+  if (shoreEl && canvas.dataset.shoreSrc) {
+    const img = new Image();
+    img.onload = () => {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, photoTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, gl.RGB, gl.UNSIGNED_BYTE, img);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      photoAspect = img.naturalWidth / img.naturalHeight;
+      photoReady = 1;
+      document.body.classList.add('gl-photo');
+    };
+    img.src = canvas.dataset.shoreSrc;
+  }
+
   // --- Scroll: raw target + smoothed value fed to the shader ---
   let scrollTarget = 0;
   let scrollSmooth = 0;
@@ -171,6 +196,19 @@ function start(gl) {
     gl.uniform1f(composite.uniforms.uScroll, scrollSmooth);
     gl.uniform1f(composite.uniforms.uTime, time);
     gl.uniform1f(composite.uniforms.uAspect, gl.drawingBufferWidth / gl.drawingBufferHeight);
+    gl.uniform1f(composite.uniforms.uPhotoReady, photoReady);
+    if (photoReady) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, photoTex);
+      gl.uniform1i(composite.uniforms.uPhoto, 1);
+      gl.uniform1f(composite.uniforms.uPhotoAspect, photoAspect);
+      const r = shoreEl.getBoundingClientRect();
+      gl.uniform2f(
+        composite.uniforms.uShoreRect,
+        r.top / window.innerHeight,
+        r.height / window.innerHeight
+      );
+    }
     blit(null);
 
     rafId = requestAnimationFrame(frame);
