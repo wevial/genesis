@@ -3,7 +3,7 @@
 // Sections are placed along the 820vh scroll journey so each lands in the
 // right part of the sky: hero in the nebula, projects in the night sky,
 // contact against the dawn, and the journey ends on a fogged-in shore —
-// a fixed photograph that fades in through the shader's fog keyframe.
+// a photograph that scrolls up into view out of the shader's fog keyframe.
 import { getCollection } from 'astro:content';
 import { Image } from 'astro:assets';
 import shorePhoto from '../assets/shore-fog.jpg';
@@ -32,14 +32,6 @@ const fmt = (d: Date) =>
   </head>
   <body>
     <canvas id="gl"></canvas>
-    <Image
-      id="shore-photo"
-      src={shorePhoto}
-      widths={[1280, 2560, 3840]}
-      sizes="100vw"
-      alt=""
-      aria-hidden="true"
-    />
 
     <main>
       <section id="hero">
@@ -97,10 +89,19 @@ const fmt = (d: Date) =>
         </div>
       </section>
 
-      <div class="void small" aria-hidden="true"></div>
+      <div class="void preshore" aria-hidden="true"></div>
 
       <footer id="shore">
-        <p class="readout landfall reveal">ALT 0 M · SECTOR: SHORE · TRANSMISSION ENDS</p>
+        <Image
+          id="shore-photo"
+          src={shorePhoto}
+          widths={[1280, 2560, 3840]}
+          sizes="100vw"
+          alt=""
+          aria-hidden="true"
+        />
+        <p class="readout landfall reveal">ALT 0 M · RUBY BEACH, WA · TRANSMISSION ENDS</p>
+        <p class="readout credit reveal">PHOTO BY ME · JUL 2026</p>
       </footer>
     </main>
 
@@ -126,17 +127,6 @@ const fmt = (d: Date) =>
     --mono: 'SF Mono', Menlo, Consolas, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  /* mandatory snap with a loophole: snap areas taller than the viewport are
-     freely scrollable inside (per spec), so the long sky voids get their own
-     alignment and stay loiterable while sections snap hard into place.
-     The short voids have no alignment — they can't be rested on, which is
-     the point. */
-  html { scroll-behavior: auto; scroll-snap-type: y mandatory; }
-  #hero { scroll-snap-align: start; }
-  #projects, #writing, #contact { scroll-snap-align: center; }
-  #shore { scroll-snap-align: end; } /* the journey's final rest: full photo */
-  .void { scroll-snap-align: center; } /* 150vh: free-scroll zone */
-  .void.small, .void.smaller { scroll-snap-align: none; }
   body {
     background: #050113; /* pre-GL paint, matches space top of gradient */
     overflow-x: hidden;
@@ -152,19 +142,6 @@ const fmt = (d: Date) =>
     touch-action: pan-y;
     z-index: 0;
   }
-  /* The shore photograph: a fixed layer above the canvas, faded in by ui.js
-     over the last stretch of scroll while the shader sky turns to fog. */
-  #shore-photo {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
-    object-fit: cover;
-    object-position: center 65%;
-    z-index: 0;
-    opacity: 0;
-    pointer-events: none;
-  }
 
   main { position: relative; z-index: 1; }
   section, #shore { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 10vh 7vw; }
@@ -172,8 +149,24 @@ const fmt = (d: Date) =>
   .void.small { height: 30vh; }
   .void.smaller { height: 40vh; }
   #contact { min-height: 130vh; }
-  #shore { min-height: 140vh; justify-content: flex-end; padding-bottom: 7vh; }
-  #shore .landfall { color: rgba(222, 234, 236, 0.8); margin: 0; }
+  .void.preshore { height: 70vh; }
+  /* The shore: the photograph is section-anchored, so the beach scrolls up
+     into view out of the shader's fog — the feathered top edge is what
+     blends it into the sky. */
+  #shore { position: relative; justify-content: flex-end; padding-bottom: 7vh; }
+  #shore-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 65%;
+    pointer-events: none;
+    mask-image: linear-gradient(to bottom, transparent, #000 22%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%);
+  }
+  #shore .landfall { position: relative; color: rgba(222, 234, 236, 0.8); margin: 0; }
+  #shore .credit { position: relative; color: rgba(200, 214, 216, 0.5); margin: 0.5rem 0 0; }
 
   .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.9s ease, transform 0.9s ease; }
   .reveal.in { opacity: 1; transform: none; }

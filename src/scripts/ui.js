@@ -75,27 +75,6 @@ function buildConstellation() {
   showCard(byId.genesis);
 }
 
-// Fade the shore photograph in over the last stretch of scroll, while the
-// GL sky (or the CSS fallback gradient) turns to fog underneath it. Lives
-// here rather than main.js so the ending works even on the no-gl path.
-function initShoreFade() {
-  const img = document.getElementById('shore-photo');
-  if (!img) return;
-  let ticking = false;
-  function update() {
-    ticking = false;
-    const max = document.documentElement.scrollHeight - window.innerHeight;
-    const s = max > 0 ? window.scrollY / max : 0;
-    const t = Math.min(Math.max((s - 0.86) / (0.97 - 0.86), 0), 1);
-    img.style.opacity = (t * t * (3 - 2 * t)).toFixed(3);
-  }
-  window.addEventListener('scroll', () => {
-    if (!ticking) { ticking = true; requestAnimationFrame(update); }
-  }, { passive: true });
-  window.addEventListener('resize', update);
-  update();
-}
-
 function initReveals() {
   const io = new IntersectionObserver(
     (entries) => {
@@ -107,5 +86,4 @@ function initReveals() {
 }
 
 buildConstellation();
-initShoreFade();
 initReveals();
