@@ -1,0 +1,10 @@
+{
+  "name": "genesis-cms-auth",
+  "main": "worker.js",
+  "compatibility_date": "2026-07-01",
+  "vars": {
+    // Comma-separated GitHub logins allowed to use the CMS. Everyone else is
+    // rejected after login even if they have a GitHub account.
+    "ALLOWED_USERS": "wevial"
+  }
+}
