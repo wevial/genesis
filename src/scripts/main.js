@@ -133,9 +133,9 @@ function start(gl) {
       ? scrollTarget
       : scrollSmooth + (scrollTarget - scrollSmooth) * (1 - Math.exp(-dt * 5));
 
-    // The nebula's territory has left the viewport past ~0.65 scroll (and the
-    // composite stops sampling it at 0.65) — skip all fluid/cloud work there.
-    const nebulaVisible = scrollSmooth < 0.68;
+    // The nebula's territory has left the viewport past ~0.50 scroll (and the
+    // composite stops sampling it at 0.50) — skip all fluid/cloud work there.
+    const nebulaVisible = scrollSmooth < 0.52;
     if (nebulaWasVisible && !nebulaVisible) fluid.clearDynamics();
     nebulaWasVisible = nebulaVisible;
 
@@ -145,7 +145,7 @@ function start(gl) {
         // sub-splats written straight into the displacement field — the parting)
         // plus a soft directional drag through the fluid sim (the wake).
         const speed = Math.hypot(pointer.dx, pointer.dy);
-        if (pointer.active && speed > 0 && scrollSmooth < 0.45) {
+        if (pointer.active && speed > 0 && scrollSmooth < 0.34) {
           const part = Math.min(speed * 2.8, 0.09);
           for (let i = 0; i < 3; i++) {
             const jx = (Math.random() - 0.5) * 0.016;

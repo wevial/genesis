@@ -303,32 +303,38 @@ uniform float uAspect;
 ${NOISE_GLSL}
 
 // --- Sky gradient keyframes: (top, mid, bottom) per scroll stop ---
-// space -> night -> dawn -> day
-const vec3 SKY_TOP[4] = vec3[4](
+// space -> night -> dawn -> day -> fog (the shore photo fades in over the fog).
+// Fog values are sampled from the top of the shore photograph so the
+// crossfade between shader sky and photo is seamless.
+const vec3 SKY_TOP[5] = vec3[5](
   vec3(0.012, 0.004, 0.055),  // space: near-black violet
   vec3(0.016, 0.043, 0.110),  // night: deep blue
   vec3(0.118, 0.157, 0.369),  // dawn: indigo
-  vec3(0.353, 0.647, 0.925)   // day: sky blue
+  vec3(0.353, 0.647, 0.925),  // day: sky blue
+  vec3(0.827, 0.867, 0.894)   // fog: pale cool gray
 );
-const vec3 SKY_MID[4] = vec3[4](
+const vec3 SKY_MID[5] = vec3[5](
   vec3(0.024, 0.010, 0.078),
   vec3(0.043, 0.086, 0.180),
   vec3(0.557, 0.337, 0.482),  // dawn: dusty rose
-  vec3(0.565, 0.792, 0.965)
+  vec3(0.565, 0.792, 0.965),
+  vec3(0.792, 0.831, 0.859)
 );
-const vec3 SKY_BOT[4] = vec3[4](
+const vec3 SKY_BOT[5] = vec3[5](
   vec3(0.043, 0.024, 0.110),
   vec3(0.078, 0.145, 0.278),
   vec3(1.000, 0.620, 0.380),  // dawn: horizon orange
-  vec3(0.851, 0.945, 0.996)   // day: pale horizon
+  vec3(0.851, 0.945, 0.996),  // day: pale horizon
+  vec3(0.729, 0.769, 0.796)   // fog: dimmer toward the ground
 );
-const float SKY_STOPS[4] = float[4](0.0, 0.36, 0.74, 1.0);
+const float SKY_STOPS[5] = float[5](0.0, 0.275, 0.565, 0.764, 0.95);
 
 vec3 skyColor(float y, float s) {
   int i = 0;
   if (s >= SKY_STOPS[1]) i = 1;
   if (s >= SKY_STOPS[2]) i = 2;
-  int j = min(i + 1, 3);
+  if (s >= SKY_STOPS[3]) i = 3;
+  int j = min(i + 1, 4);
   float t = clamp((s - SKY_STOPS[i]) / max(SKY_STOPS[j] - SKY_STOPS[i], 1e-4), 0.0, 1.0);
   t = t * t * (3.0 - 2.0 * t);
   vec3 top = mix(SKY_TOP[i], SKY_TOP[j], t);
@@ -390,12 +396,12 @@ void main() {
   // The nebula ends by scrolling past its world-space territory, not by
   // fading. This late fade only lets the shader skip cloud work once the
   // territory has already left the viewport — it is never visible.
-  float nebFade = 1.0 - smoothstep(0.50, 0.65, s);
+  float nebFade = 1.0 - smoothstep(0.38, 0.50, s);
   vec4 dye = vec4(0.0);
   if (nebFade > 0.0) dye = texture(uDye, vUv);
   float gasDen = clamp(dot(dye.rgb, vec3(0.6)) * nebFade, 0.0, 1.0);
 
-  float starFade = 1.0 - smoothstep(0.62, 0.86, s);
+  float starFade = 1.0 - smoothstep(0.47, 0.66, s);
   if (starFade > 0.0) {
     float stars = 0.0;
     stars += starLayer(suv - vec2(0.0, s * 0.45), 170.0, 0.28) * 0.30;  // dust of tiny stars

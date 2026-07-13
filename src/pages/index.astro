@@ -1,9 +1,12 @@
 ---
 // The landing page: a fixed WebGL nebula with the HUD content layer on top.
-// Sections are placed along the 650vh scroll journey so each lands in the
+// Sections are placed along the 820vh scroll journey so each lands in the
 // right part of the sky: hero in the nebula, projects in the night sky,
-// contact against the dawn.
+// contact against the dawn, and the journey ends on a fogged-in shore —
+// a fixed photograph that fades in through the shader's fog keyframe.
 import { getCollection } from 'astro:content';
+import { Image } from 'astro:assets';
+import shorePhoto from '../assets/shore-fog.jpg';
 
 const posts = (await getCollection('blog', ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
@@ -29,6 +32,14 @@ const fmt = (d: Date) =>
   </head>
   <body>
     <canvas id="gl"></canvas>
+    <Image
+      id="shore-photo"
+      src={shorePhoto}
+      widths={[1280, 2560, 3840]}
+      sizes="100vw"
+      alt=""
+      aria-hidden="true"
+    />
 
     <main>
       <section id="hero">
@@ -85,6 +96,12 @@ const fmt = (d: Date) =>
           </div>
         </div>
       </section>
+
+      <div class="void small" aria-hidden="true"></div>
+
+      <footer id="shore">
+        <p class="readout landfall reveal">ALT 0 M · SECTOR: SHORE · TRANSMISSION ENDS</p>
+      </footer>
     </main>
 
     <script>
@@ -117,6 +134,7 @@ const fmt = (d: Date) =>
   html { scroll-behavior: auto; scroll-snap-type: y mandatory; }
   #hero { scroll-snap-align: start; }
   #projects, #writing, #contact { scroll-snap-align: center; }
+  #shore { scroll-snap-align: end; } /* the journey's final rest: full photo */
   .void { scroll-snap-align: center; } /* 150vh: free-scroll zone */
   .void.small, .void.smaller { scroll-snap-align: none; }
   body {
@@ -134,13 +152,28 @@ const fmt = (d: Date) =>
     touch-action: pan-y;
     z-index: 0;
   }
+  /* The shore photograph: a fixed layer above the canvas, faded in by ui.js
+     over the last stretch of scroll while the shader sky turns to fog. */
+  #shore-photo {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    object-position: center 65%;
+    z-index: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
 
   main { position: relative; z-index: 1; }
-  section { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 10vh 7vw; }
+  section, #shore { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 10vh 7vw; }
   .void { height: 150vh; }
   .void.small { height: 30vh; }
   .void.smaller { height: 40vh; }
   #contact { min-height: 130vh; }
+  #shore { min-height: 140vh; justify-content: flex-end; padding-bottom: 7vh; }
+  #shore .landfall { color: rgba(222, 234, 236, 0.8); margin: 0; }
 
   .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.9s ease, transform 0.9s ease; }
   .reveal.in { opacity: 1; transform: none; }
@@ -264,10 +297,11 @@ const fmt = (d: Date) =>
   body.no-gl {
     background: linear-gradient(
       to bottom,
-      #050113 0%, #0a0824 10%, #0a1128 26%, #16294f 48%,
-      #2b3a67 62%, #b96a8c 72%, #ff9e6b 78%, #6ab7f0 90%, #d9f1fe 100%
+      #050113 0%, #0a0824 8%, #0a1128 21%, #16294f 38%,
+      #2b3a67 49%, #b96a8c 57%, #ff9e6b 62%, #6ab7f0 71%,
+      #d9f1fe 79%, #d3dbe1 90%, #c8ced3 100%
     );
     background-attachment: scroll;
-    background-size: 100% 650vh;
+    background-size: 100% 820vh;
   }
 </style>

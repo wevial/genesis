@@ -12,9 +12,11 @@ import {
 
 // How fast the cloud's world coordinates move per unit of scroll (viewport
 // heights over the full page). The nearest parallax layer; its territory
-// clears the viewport by ~half scroll. The cloud pass and the field-shift
-// logic below must share this value.
-const WORLD_SPEED = 3.0;
+// clears the viewport by ~0.38 scroll. The cloud pass and the field-shift
+// logic below must share this value. Tuned as 3.0 on the 650vh page and
+// rescaled by 720/550 when the shore section stretched the page to 820vh,
+// keeping the same motion per pixel scrolled.
+const WORLD_SPEED = 3.93;
 
 const CONFIG = {
   simResolution: 224,        // velocity/pressure grid (short edge)
