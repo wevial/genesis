@@ -30,4 +30,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # v3 can't deploy an assets-only Worker (no `main`); match local v4.
+          wranglerVersion: "4.110.0"
           command: deploy
