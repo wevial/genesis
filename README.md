@@ -17,6 +17,16 @@ npm run deploy    # build + wrangler deploy to Cloudflare Workers
 Live at https://genesis.kovial.workers.dev. The blog is markdown in
 `src/content/blog/` — each file becomes `/blog/<filename>`.
 
+## Publishing / CMS
+
+- **Auto-deploy**: any push to `main` triggers `.github/workflows/deploy.yml`
+  (build + `wrangler deploy`). No manual `npm run deploy` needed.
+- **CMS**: `/admin` (Sveltia) — log in with GitHub, write a post, publish. It
+  commits to `main`, which auto-deploys. Access is gated to the GitHub logins in
+  `ALLOWED_USERS` (`sveltia-auth/wrangler.jsonc`).
+- **Auth relay** (`genesis-cms-auth` worker) is separate from CI. After editing
+  the allowlist, redeploy it: `npm run deploy:auth`. See `sveltia-auth/README.md`.
+
 Debug hooks: `?tier=0..4` locks a quality tier (4 = static CSS fallback),
 `?perf` logs governor decisions to the console.
 

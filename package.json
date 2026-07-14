@@ -5,7 +5,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "deploy": "astro build && npx wrangler deploy"
+    "deploy": "astro build && npx wrangler deploy",
+    "deploy:auth": "wrangler deploy --config sveltia-auth/wrangler.jsonc"
   },
   "repository": {
     "type": "git",
